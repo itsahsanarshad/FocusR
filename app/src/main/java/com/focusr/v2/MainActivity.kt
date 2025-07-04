@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
-                        containerColor = Color.Transparent,
+                        containerColor = Color.White,
                         topBar = {
                             ModernTopBar()
                         }
