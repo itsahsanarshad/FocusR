@@ -4,6 +4,13 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+data class MainUiState(
+    val advancedMode: Boolean = false,
+    val fromTime: Pair<Int, Int> = Pair(8, 0),
+    val toTime: Pair<Int, Int> = Pair(22, 0),
+    val blockedApps: Set<String> = emptySet(),
+    val blockingEnabled: Boolean = false
+)
 
 class MainViewModel(
     private val preferencesManager: PreferencesManager
