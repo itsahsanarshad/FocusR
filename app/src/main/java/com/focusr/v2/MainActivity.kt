@@ -138,7 +138,7 @@ fun ModernTopBar() {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Row {
                     Image(
-                        painter = painterResource(id = R.drawable.self_improvement),
+                        painter = painterResource(id = R.drawable.mindfulness,
                         contentDescription = "FocusR Logo",
                         modifier = Modifier
                             .height(48.dp)
