@@ -44,7 +44,7 @@ class MainViewModel(
 
     fun setAdvancedMode(enabled: Boolean) {
         viewModelScope.launch {
-            preferencesManager.setAdvancedMode(enabled)
+            preferencesManager.setAdvancedMode(!enabled)
         }
     }
 
