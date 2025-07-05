@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
-                        containerColor = Color.White,
+                        containerColor = Color.Transparent,
                         topBar = {
                             ModernTopBar()
                         }
@@ -138,7 +138,7 @@ fun ModernTopBar() {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Row {
                     Image(
-                        painter = painterResource(id = R.drawable.mindfulness,
+                        painter = painterResource(id = R.drawable.self_improvement),
                         contentDescription = "FocusR Logo",
                         modifier = Modifier
                             .height(48.dp)
@@ -1595,8 +1595,3 @@ fun showTimeValidationMessage(
         }
     }
 }
-
-
-
-
-
