@@ -1511,15 +1511,17 @@ fun formatTime(hour: Int, minute: Int): String {
 }
 
 fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    val expectedComponentName = ComponentName(context, FocusBlockerAccessibilityService::class.java)
-    val enabledServicesSetting = Settings.Secure.getString(
-        context.contentResolver,
-        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-    ) ?: return false
+//    val expectedComponentName = ComponentName(context, FocusBlockerAccessibilityService::class.java)
+//    val enabledServicesSetting = Settings.Secure.getString(
+//        context.contentResolver,
+//        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+//    ) ?: return false
+//
+//    return enabledServicesSetting.split(":").any {
+//        ComponentName.unflattenFromString(it) == expectedComponentName
+//    }
 
-    return enabledServicesSetting.split(":").any {
-        ComponentName.unflattenFromString(it) == expectedComponentName
-    }
+    return true
 }
 
 fun showTimeValidationMessage(

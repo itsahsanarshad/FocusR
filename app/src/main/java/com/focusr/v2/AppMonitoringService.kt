@@ -27,6 +27,8 @@ class AppMonitoringService : Service() {
     private var hasBlockingStarted = false  // ✅ Local flag (not persisted)
     private val notificationHandler = Handler(Looper.getMainLooper())
     private var notificationRunnable: Runnable? = null
+    private var lastDetectedApp: String? = null
+
 
     companion object {
         const val CHANNEL_ID = "focus_blocker_channel"
@@ -66,7 +68,7 @@ class AppMonitoringService : Service() {
                 serviceScope.launch {
                     checkCurrentApp()
                 }
-                handler.postDelayed(this, 5000) // Check every 5 seconds
+                handler.postDelayed(this, 3000) // Check every 3 seconds
             }
         }
         handler.post(monitoringRunnable!!)
@@ -75,34 +77,66 @@ class AppMonitoringService : Service() {
     private suspend fun checkCurrentApp() {
         try {
             val blockingEnabled = preferencesManager.blockingEnabled.first()
-
-
-
             if (!blockingEnabled) return
 
             val blockedApps = preferencesManager.blockedApps.first()
             if (blockedApps.isEmpty()) return
 
+            // ✅ Step 1: Capture the current foreground app BEFORE anything
             val currentApp = getCurrentForegroundApp()
+            lastDetectedApp = currentApp  // ✅ Save it globally
+            Log.d("blockerdebugams", "Foreground app detected: $currentApp")
+            delay(100)
+
+            // ✅ Step 2: Only block AFTER verifying
             if (currentApp != null && blockedApps.contains(currentApp)) {
                 if (isInBlockingHours()) {
-                    blockApp(currentApp)
+                    blockApp(currentApp)  // We pass the app that was foreground BEFORE overlay launched
                 }
-
             }
 
-            // 🔴 Check time first before doing anything
             if (hasExceededToTime()) {
                 preferencesManager.setBlockingEnabled(false)
                 stopSelf()
-                return // 💡 Don't continue if time is exceeded
+                return
             }
 
-
         } catch (e: Exception) {
-            // Handle errors silently
+            Log.e("BlockerDebug", "Error: ${e.message}")
         }
     }
+
+//    private suspend fun checkCurrentApp() {
+//        try {
+//            val blockingEnabled = preferencesManager.blockingEnabled.first()
+//
+//
+//
+//            if (!blockingEnabled) return
+//
+//            val blockedApps = preferencesManager.blockedApps.first()
+//            if (blockedApps.isEmpty()) return
+//
+//            val currentApp = getCurrentForegroundApp()
+//            if (currentApp != null && blockedApps.contains(currentApp)) {
+//                if (isInBlockingHours()) {
+//                    blockApp(currentApp)
+//                }
+//
+//            }
+//
+//            // 🔴 Check time first before doing anything
+//            if (hasExceededToTime()) {
+//                preferencesManager.setBlockingEnabled(false)
+//                stopSelf()
+//                return // 💡 Don't continue if time is exceeded
+//            }
+//
+//
+//        } catch (e: Exception) {
+//            // Handle errors silently
+//        }
+//    }
 
     private fun getCurrentForegroundApp(): String? {
         val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
@@ -289,17 +323,15 @@ class AppMonitoringService : Service() {
         startActivity(intent)
     }
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Focus Blocker Service",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Notification channel for Focus Blocker foreground service"
-            }
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Focus Blocker Service",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Notification channel for Focus Blocker foreground service"
         }
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(channel)
     }
 
     private suspend fun getDynamicNotificationMessage(): String {
