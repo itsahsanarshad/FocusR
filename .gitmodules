@@ -1,0 +1,3 @@
+[submodule "libs/WheelPickerCompose"]
+	path = libs/WheelPickerCompose
+	url = https://github.com/commandiron/WheelPickerCompose.git
