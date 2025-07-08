@@ -67,5 +67,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation("io.coil-kt:coil-compose:2.5.0") // for AsyncImage
     implementation("com.github.commandiron:WheelPickerCompose:1.1.11")
+    implementation("com.github.Dimezis:BlurView:Tag")
+    implementation("com.github.Dimezis:BlurView:version-2.0.3")
+
 
 }

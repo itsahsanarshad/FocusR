@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Background color -->
+    <item android:drawable="@color/black" /> <!-- or your brand color -->
+
+    <!-- Centered logo -->
+
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/self_improvement_150dp"
+            android:filter="true"/>
+    </item>
+
+</layer-list>

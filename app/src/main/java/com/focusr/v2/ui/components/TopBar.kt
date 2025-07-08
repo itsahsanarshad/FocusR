@@ -7,13 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.magnifier
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -96,19 +97,23 @@ fun ModernTopBar(primaryAccent: Color) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.25f),
-                        Color.White.copy(alpha = 0.1f)
-                    )
-                )
+                color = Color.Transparent
+//                        Brush.linearGradient(
+//                        colors = listOf(
+//                            Color.White.copy(alpha = 0.25f),
+//                            Color.White.copy(alpha = 0.1f)
+//                        )
+//                        )
             )
             .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
 //            .backdrop(BlurRadius.Medium)
     ) {
+
         CenterAlignedTopAppBar(
+
             title = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(Modifier.height(5.dp))
                     Row {
                         Image(
                             painter = painterResource(id = R.drawable.self_improvement),
@@ -133,6 +138,7 @@ fun ModernTopBar(primaryAccent: Color) {
                         fontSize = 14.sp,
                         color = Color.White.copy(alpha = 0.8f)
                     )
+                    Spacer(Modifier.height(10.dp))
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(

@@ -420,6 +420,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
@@ -428,8 +429,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -663,17 +668,22 @@ class BlockerOverlayActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        Brush.verticalGradient(
+                        Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFFF0F9FF), // Light blue
-                                Color(0xFFE0F2FE), // Lighter blue
-                                Color(0xFFBAE6FD)  // Sky blue - matching your theme
-                            )
+                                Color(0xFF1A1A2E), // Deep dark blue
+                                Color(0xFF16213E), // Medium dark blue
+                                Color(0xFF0F3460)  // Darker blue
+                            ),
+                            center = Offset(0.3f, 0.1f),
+                            radius = 1000f
                         )
                     )
-                    .blur(if (showContent) 0.dp else 8.dp),
+                    .blur(if (showContent) 0.dp else 12.dp),
                 contentAlignment = Alignment.Center
             ) {
+                // Animated background particles/elements
+                AnimatedBackgroundElements()
+
                 AnimatedVisibility(
                     visible = showContent,
                     enter = fadeIn(animationSpec = tween(1000)) + scaleIn(
@@ -696,6 +706,61 @@ class BlockerOverlayActivity : ComponentActivity() {
     }
 
     @Composable
+    fun AnimatedBackgroundElements() {
+        val infiniteTransition = rememberInfiniteTransition(label = "background_animation")
+
+        // Floating orbs animation
+        val orb1Offset by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 100f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(8000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ), label = "orb1"
+        )
+
+        val orb2Offset by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = -80f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(6000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ), label = "orb2"
+        )
+
+        // Background gradient orbs
+        Box(
+            modifier = Modifier
+                .offset(x = orb1Offset.dp, y = (-200).dp)
+                .size(200.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF6C63FF).copy(alpha = 0.1f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .offset(x = orb2Offset.dp, y = 250.dp)
+                .size(150.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF4ECDC4).copy(alpha = 0.08f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+    }
+
+    @Composable
     fun ReflectiveCard(
         message: ReflectiveMessage,
         onChooseToClose: () -> Unit,
@@ -704,121 +769,223 @@ class BlockerOverlayActivity : ComponentActivity() {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(24.dp)
+                .drawBehind {
+                    // Outer glow effect
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF6C63FF).copy(alpha = 0.2f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = size.maxDimension
+                        )
+                    )
+                },
             colors = CardDefaults.cardColors(
-                containerColor = Color.White.copy(alpha = 0.98f)
+                containerColor = Color.Black.copy(alpha = 0.4f) // Glassmorphic background
             ),
             shape = RoundedCornerShape(28.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+//            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
-            Column(
+            Box(
                 modifier = Modifier
-                    .padding(36.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Animated Icon with gentle breathing effect
-                val infiniteTransition = rememberInfiniteTransition(label = "icon_animation")
-                val iconScale by infiniteTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 1.12f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(2500, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ), label = "icon_scale"
-                )
-
-                val iconAlpha by infiniteTransition.animateFloat(
-                    initialValue = 0.8f,
-                    targetValue = 1f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(2500, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ), label = "icon_alpha"
-                )
-
-                Icon(
-                    imageVector = message.actionIcon,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(88.dp)
-                        .graphicsLayer(
-                            scaleX = iconScale,
-                            scaleY = iconScale,
-                            alpha = iconAlpha
-                        ),
-                    tint = Color(0xFF0EA5E9) // Light blue matching your theme
-                )
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                // Main reflective question
-                Text(
-                    text = message.mainText,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF1E293B), // Dark slate
-                    textAlign = TextAlign.Center,
-                    lineHeight = 34.sp
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Subtitle with context
-                Text(
-                    text = message.subText,
-                    fontSize = 17.sp,
-                    color = Color(0xFF64748B), // Slate gray
-                    textAlign = TextAlign.Center,
-                    lineHeight = 26.sp
-                )
-
-                Spacer(modifier = Modifier.height(36.dp))
-
-                // Single focus button - no continue option
-                Button(
-                    onClick = onChooseToClose,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF0EA5E9) // Matching your theme blue
-                    ),
-                    shape = RoundedCornerShape(20.dp),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = if (buttonClicked) 2.dp else 8.dp
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.2f),
+                                Color.White.copy(alpha = 0.1f)
+                            ),
+                            start = Offset(0f, 0f),
+                            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                        )
                     )
+                    .drawBehind {
+                        // Glass border effect
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.3f),
+                            size = size,
+                            cornerRadius = CornerRadius(28.dp.toPx()),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                    }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(36.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    // Animated Icon with enhanced breathing and glow effects
+                    val infiniteTransition = rememberInfiniteTransition(label = "icon_animation")
+                    val iconScale by infiniteTransition.animateFloat(
+                        initialValue = 1f,
+                        targetValue = 1.15f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(3000, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ), label = "icon_scale"
+                    )
+
+                    val iconGlow by infiniteTransition.animateFloat(
+                        initialValue = 0.6f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(2000, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ), label = "icon_glow"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(88.dp)
+                            .graphicsLayer(
+                                scaleX = iconScale,
+                                scaleY = iconScale,
+                                alpha = iconGlow
+                            )
+                            .drawBehind {
+                                // Icon glow effect
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            Color(0xFF6C63FF).copy(alpha = 0.3f * iconGlow),
+                                            Color.Transparent
+                                        ),
+                                        radius = size.maxDimension * 0.8f
+                                    )
+                                )
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = message.actionIcon,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = message.actionText,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
+                            modifier = Modifier.size(48.dp),
+                            tint = Color(0xFF6C63FF) // Primary accent color
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // Main reflective question with gradient text effect
+                    Text(
+                        text = message.mainText,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 34.sp,
+                        modifier = Modifier.drawBehind {
+                            // Text shadow effect
+//                            drawRect(
+//                                brush = Brush.verticalGradient(
+//                                    colors = listOf(
+//                                        Color(0xFF6C63FF).copy(alpha = 0.1f),
+//                                        Color.Transparent
+//                                    )
+//                                )
+//                            )
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Subtitle with enhanced styling
+                    Text(
+                        text = message.subText,
+                        fontSize = 17.sp,
+                        color = Color.White.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 26.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(36.dp))
+
+                    // Glassmorphic button with enhanced effects
+                    Button(
+                        onClick = onChooseToClose,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .drawBehind {
+                                // Button glow effect
+//                                drawRoundRect(
+//                                    brush = Brush.radialGradient(
+//                                        colors = listOf(
+//                                            Color(0xFF6C63FF).copy(alpha = 0.3f),
+//                                            Color.Transparent
+//                                        ),
+//                                        center = center,
+//                                        radius = size.maxDimension * 0.8f
+//                                    ),
+//                                    cornerRadius = CornerRadius(20.dp.toPx())
+//                                )
+                            },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = if (buttonClicked) 2.dp else 0.dp
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFF6C63FF).copy(alpha = 0.8f),
+                                            Color(0xFF4ECDC4).copy(alpha = 0.6f)
+                                        )
+                                    ),
+                                    shape = RoundedCornerShape(20.dp)
+                                )
+                                .drawBehind {
+                                    // Glass border on button
+                                    drawRoundRect(
+                                        color = Color.White.copy(alpha = 0.3f),
+                                        size = size,
+                                        cornerRadius = CornerRadius(20.dp.toPx()),
+                                        style = Stroke(width = 1.dp.toPx())
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = message.actionIcon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = message.actionText,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Motivational footer with accent color
+                    Text(
+                        text = message.motivationalFooter,
+                        fontSize = 14.sp,
+                        color = Color(0xFF4ECDC4).copy(alpha = 0.9f), // Teal accent
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Motivational footer
-                Text(
-                    text = message.motivationalFooter,
-                    fontSize = 14.sp,
-                    color = Color(0xFF0EA5E9).copy(alpha = 0.8f),
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Medium
-                )
             }
         }
     }

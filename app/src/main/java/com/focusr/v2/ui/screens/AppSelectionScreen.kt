@@ -106,20 +106,20 @@ fun ModernAppSelectionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding(),
-                color = Color.White.copy(alpha = 0.1f),
+                color = Color.Transparent,
                 tonalElevation = 0.dp
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.15f),
-                                    Color.White.copy(alpha = 0.05f)
-                                )
-                            )
-                        )
+//                        .background(
+//                            brush = Brush.horizontalGradient(
+//                                colors = listOf(
+//                                    Color.Transparent,
+//                                    Color.Transparent
+//                                )
+//                            )
+//                        )
                         .padding(16.dp)
                 ) {
                     Row(
@@ -445,10 +445,10 @@ fun ModernAppItem(
                 Color.White.copy(alpha = 0.25f)
             else
                 Color.White.copy(alpha = 0.1f)
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 8.dp else 4.dp
         )
+//        elevation = CardDefaults.cardElevation(
+//            defaultElevation = if (isSelected) 8.dp else 4.dp
+//        )
     ) {
         Row(
             modifier = Modifier

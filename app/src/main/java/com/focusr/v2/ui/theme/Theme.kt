@@ -38,30 +38,73 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 
+//private val LightColorScheme = lightColorScheme(
+//
+//
+////    primary = Color(0xFF56CCF2),              // Sky Blue
+////    onPrimary = Color.White,
+////
+////    primaryContainer = Color(0xFFB3E5FC),     // Light Cyan-Blue
+////    onPrimaryContainer = Color(0xFF00344A),
+////
+////    secondary = Color(0xFF2D9CDB),            // Medium Blue
+////    onSecondary = Color.White,
+////
+////    secondaryContainer = Color(0xFFBBDEFB),
+////    onSecondaryContainer = Color(0xFF002F4B),
+////
+////    tertiary = Color(0xFF6FCF97),             // Fresh Mint
+////    onTertiary = Color(0xFF003820),
+////
+////    background = Color(0xFFE0F7FA),           // Very Light Cyan
+////    onBackground = Color(0xFF0A1F2D),         // Deep Navy for Text
+////
+////    surface = Color(0xFFE3F2FD),              // Soft Light Blue
+////    onSurface = Color(0xFF0A1F2D),
+////
+////    error = Color(0xFFEB5757),                // Soft Red
+////    onError = Color.White
+//)
+
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF56CCF2),              // Sky Blue
+    primary = Color(0xFF6C63FF),              // Purple Accent
     onPrimary = Color.White,
 
-    primaryContainer = Color(0xFFB3E5FC),     // Light Cyan-Blue
-    onPrimaryContainer = Color(0xFF00344A),
+    primaryContainer = Color(0xFF4A47A3),     // Darker Purple
+    onPrimaryContainer = Color(0xFFE8E4FF),
 
-    secondary = Color(0xFF2D9CDB),            // Medium Blue
-    onSecondary = Color.White,
+    secondary = Color(0xFF4ECDC4),            // Teal Accent
+    onSecondary = Color(0xFF003A36),
 
-    secondaryContainer = Color(0xFFBBDEFB),
-    onSecondaryContainer = Color(0xFF002F4B),
+    secondaryContainer = Color(0xFF2E7D78),
+    onSecondaryContainer = Color(0xFFB8F5F0),
 
-    tertiary = Color(0xFF6FCF97),             // Fresh Mint
-    onTertiary = Color(0xFF003820),
+    tertiary = Color(0xFFFF6B6B),             // Coral Accent
+    onTertiary = Color(0xFF3C0000),
 
-    background = Color(0xFFE0F7FA),           // Very Light Cyan
-    onBackground = Color(0xFF0A1F2D),         // Deep Navy for Text
+    background = Color(0xFF1A1A2E),           // Dark Navy Base
+    onBackground = Color(0xFFE8E8F0),         // Light Text
 
-    surface = Color(0xFFE3F2FD),              // Soft Light Blue
-    onSurface = Color(0xFF0A1F2D),
+    surface = Color(0xFF16213E),              // Dark Blue Surface
+    onSurface = Color(0xFFE8E8F0),
 
-    error = Color(0xFFEB5757),                // Soft Red
-    onError = Color.White
+    surfaceVariant = Color(0xFF0F3460),       // Deepest Blue
+    onSurfaceVariant = Color(0xFFB8C4D6),
+
+    outline = Color(0xFF4A5568),
+    outlineVariant = Color(0xFF2D3748),
+
+    error = Color(0xFFFF6B6B),                // Coral Error
+    onError = Color.White,
+
+    errorContainer = Color(0xFF4A1A1A),
+    onErrorContainer = Color(0xFFFFDAD6),
+
+    // Additional glassmorphism-specific colors
+    surfaceTint = Color(0xFF6C63FF),
+    inverseSurface = Color(0xFFE8E8F0),
+    inverseOnSurface = Color(0xFF1A1A2E),
+    inversePrimary = Color(0xFF4A47A3)
 )
 
 @Composable
