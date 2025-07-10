@@ -52,7 +52,7 @@ fun BottomNavBar(navController: NavHostController) {
                 brush = Brush.verticalGradient(
                     colors = listOf(
                         Color.Transparent,
-                        Color(0xFF1A1A2E).copy(alpha = 0.95f)
+                       Color.Transparent
                     )
                 )
             )
@@ -65,16 +65,16 @@ fun BottomNavBar(navController: NavHostController) {
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .shadow(
                     elevation = 20.dp,
-                    shape = RoundedCornerShape(25.dp),
+                    shape = RoundedCornerShape(24.dp),
                     ambientColor = Color(0xFF6C63FF).copy(alpha = 0.3f),
                     spotColor = Color(0xFF6C63FF).copy(alpha = 0.3f)
                 )
-                .clip(RoundedCornerShape(25.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(
                     brush = Brush.linearGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.2f),
-                            Color.White.copy(alpha = 0.1f)
+                            Color.Black.copy(alpha = 0.2f),
+                            Color.Black.copy(alpha = 0.05f)
                         )
                     )
                 )
@@ -86,13 +86,12 @@ fun BottomNavBar(navController: NavHostController) {
                             Color.White.copy(alpha = 0.2f)
                         )
                     ),
-                    shape = RoundedCornerShape(25.dp)
+                    shape = RoundedCornerShape(24.dp)
                 )
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp),
+                    .fillMaxSize(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -103,7 +102,7 @@ fun BottomNavBar(navController: NavHostController) {
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp)
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(24.dp))
                             .background(
                                 if (isSelected) {
                                     Brush.linearGradient(

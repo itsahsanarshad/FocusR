@@ -131,7 +131,7 @@ fun ModernAppSelectionScreen(
                         Surface(
                             onClick = onBackClick,
                             modifier = Modifier.size(48.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(24.dp),
                             color = Color(0xFF2D3748),
                             shadowElevation = 8.dp,
                             border = BorderStroke(2.dp, Color.White.copy(alpha = 0.6f))
@@ -177,7 +177,7 @@ fun ModernAppSelectionScreen(
                             Surface(
                                 onClick = { selectedApps = emptySet() },
                                 modifier = Modifier.size(48.dp),
-                                shape = RoundedCornerShape(16.dp),
+                                shape = RoundedCornerShape(24.dp),
                                 color = Color(0xFFDC3545),
                                 shadowElevation = 8.dp,
                                 border = BorderStroke(2.dp, Color.White.copy(alpha = 0.6f))
@@ -270,7 +270,7 @@ fun ModernAppSelectionScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF6C63FF)
                     ),
@@ -375,7 +375,7 @@ fun ModernSectionHeader(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = color.copy(alpha = 0.2f)
         )
@@ -400,7 +400,7 @@ fun ModernSectionHeader(
             )
             Spacer(modifier = Modifier.weight(1f))
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = color.copy(alpha = 0.3f)
             ) {
                 Text(
@@ -439,7 +439,7 @@ fun ModernAppItem(
                 scaleY = animatedScale
             }
             .clickable { onSelectionChange(!isSelected) },
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
                 Color.White.copy(alpha = 0.25f)
@@ -460,7 +460,7 @@ fun ModernAppItem(
             Box(
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(55.dp))
                     .background(
                         Color.White.copy(alpha = 0.2f)
                     )
@@ -471,7 +471,7 @@ fun ModernAppItem(
                         contentDescription = "${appInfo.appName} icon",
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(16.dp)),
+                            .clip(RoundedCornerShape(55.dp)),
                         contentScale = ContentScale.Fit
                     )
                 } else {
@@ -522,7 +522,7 @@ fun ModernAppItem(
                 if (selected) {
                     Surface(
                         modifier = Modifier.size(36.dp),
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(24.dp),
                         color = Color(0xFF6C63FF)
                     ) {
                         Icon(
@@ -535,7 +535,7 @@ fun ModernAppItem(
                 } else {
                     Surface(
                         modifier = Modifier.size(36.dp),
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(24.dp),
                         color = Color.Transparent,
                         border = BorderStroke(
                             2.dp,

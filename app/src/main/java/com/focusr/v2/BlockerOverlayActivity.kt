@@ -418,7 +418,9 @@ import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -478,14 +480,36 @@ class BlockerOverlayActivity : ComponentActivity() {
         startActivity(homeIntent)
     }
 
+//    fun getAppCategory(packageName: String): AppCategory {
+//        return try {
+//            val applicationInfo = packageManager.getApplicationInfo(packageName, 0)
+//            val category = applicationInfo.category
+//            Log.d("App Category Info", "Category value = $category")
+//
+//            // Use Android native category if available
+//            when (category) {
+//                ApplicationInfo.CATEGORY_GAME -> AppCategory.GAMING
+//                ApplicationInfo.CATEGORY_AUDIO -> AppCategory.ENTERTAINMENT
+//                ApplicationInfo.CATEGORY_VIDEO -> AppCategory.ENTERTAINMENT
+//                ApplicationInfo.CATEGORY_IMAGE -> AppCategory.GENERAL
+//                ApplicationInfo.CATEGORY_SOCIAL -> AppCategory.SOCIAL_MEDIA
+//                ApplicationInfo.CATEGORY_NEWS -> AppCategory.NEWS
+//                ApplicationInfo.CATEGORY_MAPS -> AppCategory.GENERAL
+//                ApplicationInfo.CATEGORY_PRODUCTIVITY -> AppCategory.GENERAL
+//                else -> getCategoryFromPackageName(packageName) // fallback
+//            }
+//        } catch (e: Exception) {
+//            Log.e("App Category Info", "Error: ${e.message}")
+//            AppCategory.GENERAL
+//        }
+//    }
+
     fun getAppCategory(packageName: String): AppCategory {
         return try {
             val applicationInfo = packageManager.getApplicationInfo(packageName, 0)
             val category = applicationInfo.category
-            Log.d("App Category Info", "Category value = $category")
 
-            // Use Android native category if available
-            when (category) {
+            val systemCategory = when (category) {
                 ApplicationInfo.CATEGORY_GAME -> AppCategory.GAMING
                 ApplicationInfo.CATEGORY_AUDIO -> AppCategory.ENTERTAINMENT
                 ApplicationInfo.CATEGORY_VIDEO -> AppCategory.ENTERTAINMENT
@@ -494,13 +518,23 @@ class BlockerOverlayActivity : ComponentActivity() {
                 ApplicationInfo.CATEGORY_NEWS -> AppCategory.NEWS
                 ApplicationInfo.CATEGORY_MAPS -> AppCategory.GENERAL
                 ApplicationInfo.CATEGORY_PRODUCTIVITY -> AppCategory.GENERAL
-                else -> getCategoryFromPackageName(packageName) // fallback
+                else -> AppCategory.GENERAL
+            }
+
+            val fallbackCategory = getCategoryFromPackageName(packageName)
+
+            // If fallback differs from system category, prefer fallback
+            if (fallbackCategory != systemCategory) {
+                fallbackCategory
+            } else {
+                systemCategory
             }
         } catch (e: Exception) {
             Log.e("App Category Info", "Error: ${e.message}")
-            AppCategory.GENERAL
+            getCategoryFromPackageName(packageName) // fallback on error
         }
     }
+
 
 
 //    private fun getCategoryFromPackageName(packageName: String): AppCategory {
@@ -769,24 +803,11 @@ class BlockerOverlayActivity : ComponentActivity() {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
-                .drawBehind {
-                    // Outer glow effect
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF6C63FF).copy(alpha = 0.2f),
-                                Color.Transparent
-                            ),
-                            center = center,
-                            radius = size.maxDimension
-                        )
-                    )
-                },
+                .padding(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color.Black.copy(alpha = 0.4f) // Glassmorphic background
+                containerColor = Color.Transparent // Glassmorphic background
             ),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
 //            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Box(
@@ -794,8 +815,8 @@ class BlockerOverlayActivity : ComponentActivity() {
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.2f),
-                                Color.White.copy(alpha = 0.1f)
+                                Color.Black.copy(alpha = 0.3f),
+                                Color.White.copy(alpha = 0.08f)
                             ),
                             start = Offset(0f, 0f),
                             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
@@ -863,7 +884,7 @@ class BlockerOverlayActivity : ComponentActivity() {
                             imageVector = message.actionIcon,
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
-                            tint = Color(0xFF6C63FF) // Primary accent color
+                            tint = Color.White// Primary accent color
                         )
                     }
 
@@ -878,15 +899,7 @@ class BlockerOverlayActivity : ComponentActivity() {
                         textAlign = TextAlign.Center,
                         lineHeight = 34.sp,
                         modifier = Modifier.drawBehind {
-                            // Text shadow effect
-//                            drawRect(
-//                                brush = Brush.verticalGradient(
-//                                    colors = listOf(
-//                                        Color(0xFF6C63FF).copy(alpha = 0.1f),
-//                                        Color.Transparent
-//                                    )
-//                                )
-//                            )
+
                         }
                     )
 
@@ -904,54 +917,33 @@ class BlockerOverlayActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.height(36.dp))
 
                     // Glassmorphic button with enhanced effects
-                    Button(
+                    OutlinedButton (
                         onClick = onChooseToClose,
+                        shape = RoundedCornerShape(24.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(60.dp)
-                            .drawBehind {
-                                // Button glow effect
-//                                drawRoundRect(
-//                                    brush = Brush.radialGradient(
-//                                        colors = listOf(
-//                                            Color(0xFF6C63FF).copy(alpha = 0.3f),
-//                                            Color.Transparent
-//                                        ),
-//                                        center = center,
-//                                        radius = size.maxDimension * 0.8f
-//                                    ),
-//                                    cornerRadius = CornerRadius(20.dp.toPx())
-//                                )
-                            },
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color(0xFF6C63FF).copy(alpha = 0.8f),
+                                            Color(0xFF4ECDC4).copy(alpha = 0.6f)
+                                    )
+
+                                ),
+                                shape = RoundedCornerShape(24.dp)
+                            ),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent
                         ),
-                        shape = RoundedCornerShape(20.dp),
+
                         elevation = ButtonDefaults.buttonElevation(
                             defaultElevation = if (buttonClicked) 2.dp else 0.dp
                         )
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            Color(0xFF6C63FF).copy(alpha = 0.8f),
-                                            Color(0xFF4ECDC4).copy(alpha = 0.6f)
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(20.dp)
-                                )
-                                .drawBehind {
-                                    // Glass border on button
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.3f),
-                                        size = size,
-                                        cornerRadius = CornerRadius(20.dp.toPx()),
-                                        style = Stroke(width = 1.dp.toPx())
-                                    )
-                                },
+                                .fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Row(
