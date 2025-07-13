@@ -2,6 +2,7 @@
 
 package com.focusr.v2.ui.screens
 
+import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -55,7 +56,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PaintingStyle.Companion.Stroke
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import com.focusr.v2.AppInfo
 import com.focusr.v2.AppManager
@@ -64,8 +68,11 @@ import com.focusr.v2.AppMonitoringService
 import com.focusr.v2.MainActivity
 import com.focusr.v2.MainViewModel
 import com.focusr.v2.PermissionHelper
+import com.focusr.v2.PermissionHelper.hasIgnoreBatteryOptimizationsPermission
+import com.focusr.v2.PermissionHelper.requestIgnoreBatteryOptimizations
 import com.focusr.v2.PreferencesManager
 import com.focusr.v2.R
+import com.focusr.v2.ServiceScheduler
 import com.focusr.v2.navigation.Screen
 import com.focusr.v2.ui.components.ModernTimeButton
 import com.focusr.v2.ui.components.ModernTimePickerDialog
@@ -74,11 +81,14 @@ enum class PermissionStep {
     USAGE_STATS,
     OVERLAY,
     ACCESSIBILITY,
+
+    BATTERY_OPTIMIZATION,  // new step added here
     COMPLETED
 }
 
 @Composable
-fun HomeScreen(activity: ComponentActivity,navController: NavController) {
+//fun HomeScreen(activity: ComponentActivity,navController: NavController) {
+fun HomeScreen(activity: MainActivity,navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preferencesManager = remember(context) { PreferencesManager(context.applicationContext) }
@@ -87,12 +97,14 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
 
     val uiState by viewModel.uiState.collectAsState()
 
+
     var showTimePicker by remember { mutableStateOf(false) }
     var isFromPicker by remember { mutableStateOf(true) }
     var showAppSelection by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
     var currentPermissionStep by remember { mutableStateOf(PermissionStep.COMPLETED) }
     var isWaitingForPermission by remember { mutableStateOf(false) }
+    val advancedMode = uiState.advancedMode
 
     val fromTimeState = rememberTimePickerState(
         initialHour = uiState.fromTime.first,
@@ -129,6 +141,7 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
     // Monitoring Service Functions
     fun startMonitoringService() {
         try {
+            viewModel.setWasBlockingEnabledBeforeReboot(true)
             val intent = Intent(context, AppMonitoringService::class.java)
             context.startForegroundService(intent)
         } catch (e: Exception) {
@@ -138,12 +151,14 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
 
     fun stopMonitoringService() {
         try {
+            viewModel.setWasBlockingEnabledBeforeReboot(false)
             val intent = Intent(context, AppMonitoringService::class.java)
             context.stopService(intent)
         } catch (e: Exception) {
             Log.e("HomeScreen", "Failed to stop service", e)
         }
     }
+
 
     fun checkPermissionFlow() {
         if (!isWaitingForPermission) return
@@ -178,6 +193,14 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
                     showPermissionDialog = true
                 }
             }
+            PermissionStep.BATTERY_OPTIMIZATION -> {
+                if (hasIgnoreBatteryOptimizationsPermission(context)) {
+                    currentPermissionStep = PermissionStep.COMPLETED
+                    showPermissionDialog = true
+                } else {
+                    showPermissionDialog = true
+                }
+            }
             PermissionStep.COMPLETED -> {
                 showPermissionDialog = false
                 isWaitingForPermission = false
@@ -198,6 +221,8 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
             }
         }
     }
+
+
 
     // MAIN LAYOUT
     Box(
@@ -224,17 +249,69 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
                 item {
                     ModernStatusCard(
                         isEnabled = uiState.blockingEnabled,
-                        pulseScale = if (uiState.blockingEnabled) pulseAnimation else 1f,
+                        pulseScale =  1f, // was giving error reset later
+//                        onToggle = { enabled ->
+//                            if (enabled) {
+//                                val hasUsageStats = PermissionHelper.hasUsageStatsPermission(context)
+//                                val hasOverlay = PermissionHelper.hasOverlayPermission(context)
+//                                val hasAccessibility = isAccessibilityServiceEnabled(context)
+//                               // val hasbatteryoptimization = hasIgnoreBatteryOptimizationsPermission(context)
+//                                val fromTime = uiState.fromTime
+//                                val toTime = uiState.toTime
+//                                val advancedMode = uiState.advancedMode
+//
+//                                showTimeValidationMessage(context, fromTime, toTime, advancedMode)
+//
+//                                when {
+//                                    !hasUsageStats -> {
+//                                        currentPermissionStep = PermissionStep.USAGE_STATS
+//                                        isWaitingForPermission = true
+//                                        showPermissionDialog = true
+//                                    }
+//                                    !hasOverlay -> {
+//                                        currentPermissionStep = PermissionStep.OVERLAY
+//                                        isWaitingForPermission = true
+//                                        showPermissionDialog = true
+//                                    }
+//                                    !hasAccessibility -> {
+//                                        currentPermissionStep = PermissionStep.ACCESSIBILITY
+//                                        isWaitingForPermission = true
+//                                        showPermissionDialog = true
+//                                    }
+//                                    !hasIgnoreBatteryOptimizationsPermission(context) -> {
+//                                        currentPermissionStep = PermissionStep.BATTERY_OPTIMIZATION
+//                                        isWaitingForPermission = true
+//                                        showPermissionDialog = true
+//                                    }
+//                                    else -> {
+//                                            scope.launch {
+////                                                viewModel.setBlockingEnabled(true)
+////                                                preferencesManager.setBlockingStartTime(System.currentTimeMillis())
+////                                                delay(100)
+////                                                startMonitoringService()
+//                                                onBlock
+//                                                Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
+//                                            }
+//                                    }
+//                                }
+//                            } else {
+//                                scope.launch {
+//                                    viewModel.setBlockingEnabled(false)
+//                                    stopMonitoringService()
+//                                    Toast.makeText(context, "FocusR Service Stopped.", Toast.LENGTH_SHORT).show()
+//                                }
+//                            }
+//                        },
                         onToggle = { enabled ->
+
                             if (enabled) {
                                 val hasUsageStats = PermissionHelper.hasUsageStatsPermission(context)
                                 val hasOverlay = PermissionHelper.hasOverlayPermission(context)
                                 val hasAccessibility = isAccessibilityServiceEnabled(context)
-                                val fromTime = uiState.fromTime
-                                val toTime = uiState.toTime
-                                val advancedMode = uiState.advancedMode
+                                val hasBatteryOptimization = hasIgnoreBatteryOptimizationsPermission(context)
 
-                                showTimeValidationMessage(context, fromTime, toTime, advancedMode)
+
+                                showTimeValidationMessage(context, uiState.fromTime, uiState.toTime, uiState.advancedMode)
 
                                 when {
                                     !hasUsageStats -> {
@@ -252,21 +329,50 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
                                         isWaitingForPermission = true
                                         showPermissionDialog = true
                                     }
+                                    !hasBatteryOptimization -> {
+                                        currentPermissionStep = PermissionStep.BATTERY_OPTIMIZATION
+                                        isWaitingForPermission = true
+                                        showPermissionDialog = true
+                                    }
                                     else -> {
-                                        scope.launch {
-                                            viewModel.setBlockingEnabled(true)
-                                            preferencesManager.setBlockingStartTime(System.currentTimeMillis())
-                                            delay(100)
-                                            startMonitoringService()
-                                            Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
+                                        // All permissions granted — call your main function here
+                                        if(!advancedMode){
+                                            scope.launch {
+                                                viewModel.setBlockingEnabled(true)
+                                                preferencesManager.setBlockingStartTime(System.currentTimeMillis())
+                                                delay(100)
+                                                startMonitoringService()
+                                                Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
+
                                         }
+                                        }
+                                        else {
+                                            activity.onBlockingToggled(true)
+                                            Toast.makeText(
+                                                context,
+                                                "FocusR Service Started.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+
                                     }
                                 }
                             } else {
-                                scope.launch {
+                                if (!advancedMode){
+                                    scope.launch {
                                     viewModel.setBlockingEnabled(false)
                                     stopMonitoringService()
                                     Toast.makeText(context, "FocusR Service Stopped.", Toast.LENGTH_SHORT).show()
+                                }
+                                }
+                                else {
+                                    // Disable blocking
+                                    activity.onBlockingToggled(false)
+                                    Toast.makeText(
+                                        context,
+                                        "FocusR Service Stopped.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             }
                         },
@@ -282,7 +388,29 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
                         advancedMode = uiState.advancedMode,
                         fromTime = uiState.fromTime,
                         toTime = uiState.toTime,
-                        onAdvancedModeToggle = { scope.launch { viewModel.setAdvancedMode(it) } },
+//                        onAdvancedModeToggle = { scope.launch { viewModel.setAdvancedMode(it) } },
+
+                        // Replace your existing onAdvancedModeToggle callback with this:
+                        onAdvancedModeToggle = { newAdvancedMode ->
+                            scope.launch {
+                                // Reset everything
+                                viewModel.setBlockingEnabled(false)
+                                val serviceScheduler = ServiceScheduler(context)
+                                serviceScheduler.resetService()
+
+                                // Update the mode
+                                viewModel.setAdvancedMode(newAdvancedMode)
+
+
+                                if(uiState.blockingEnabled){
+                                // Inform user
+                                Toast.makeText(
+                                    context,
+                                    "Mode changed. Service stopped and reset. Please configure and start again.",
+                                    Toast.LENGTH_SHORT
+                                ).show()}
+                            }
+                        },
                         onFromTimeClick = {
                             isFromPicker = true
                             showTimePicker = true
@@ -333,6 +461,16 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
                     onDismiss = { showTimePicker = false },
                     onConfirm = { hour, minute ->
                         scope.launch {
+                            val wasRunning = uiState.blockingEnabled
+
+                            // Always stop and reset service if it was running (for both simple and advanced mode)
+                            if (wasRunning) {
+                                viewModel.setBlockingEnabled(false)
+                                val serviceScheduler = ServiceScheduler(context)
+                                serviceScheduler.resetService()
+                            }
+
+                            // Update the time variables and viewModel
                             if (isFromPicker) {
                                 fromHour = hour
                                 fromMinute = minute
@@ -341,6 +479,15 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
                                 toHour = hour
                                 toMinute = minute
                                 viewModel.setToTime(hour, minute)
+                            }
+
+                            // Show appropriate message
+                            if (wasRunning) {
+                                Toast.makeText(
+                                    context,
+                                    "Time updated. Service stopped and reset. Please restart the service.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
                         showTimePicker = false
@@ -370,6 +517,10 @@ fun HomeScreen(activity: ComponentActivity,navController: NavController) {
                             }
                             PermissionStep.ACCESSIBILITY -> {
                                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                showPermissionDialog = false
+                            }
+                            PermissionStep.BATTERY_OPTIMIZATION -> {
+                                requestIgnoreBatteryOptimizations(context)
                                 showPermissionDialog = false
                             }
                             PermissionStep.COMPLETED -> {
@@ -854,6 +1005,8 @@ fun ModernPermissionDialog(
     onDismiss: () -> Unit,
     onGrantPermission: () -> Unit
 ) {
+    val manufacturer = android.os.Build.MANUFACTURER.lowercase(Locale.getDefault())
+
     val (title, description, buttonText, icon) = when (step) {
         PermissionStep.USAGE_STATS -> Quadruple(
             "Usage Access Permission",
@@ -872,6 +1025,12 @@ fun ModernPermissionDialog(
             "Enable the accessibility service for instant app detection and seamless blocking.",
             "Enable Service",
             Icons.Outlined.Accessibility
+        )
+        PermissionStep.BATTERY_OPTIMIZATION -> Quadruple(
+            "Battery Optimization",
+            "Please remove Focusr from battery optimizations so it can run reliably in the background.\n Step.1 Search ForcusR in All apps, Step.2 Remove From Optimization Mode, Enjoy your Focusr Journey",
+            "Remove",
+            Icons.Outlined.BatteryChargingFull  // Or a suitable battery icon
         )
         PermissionStep.COMPLETED -> Quadruple(
             "Setup Complete!",
@@ -1001,7 +1160,7 @@ fun ModernPermissionDialog(
                         )
                     } else {
                         Icon(
-                            imageVector = Icons.Outlined.Block,
+                            imageVector = icon,
                             contentDescription = null,
                             tint = errorAccent,
                             modifier = Modifier.size(40.dp)
@@ -1051,9 +1210,10 @@ fun ModernPermissionDialog(
 
                     // Progress Indicator
                     val progress = when (step) {
-                        PermissionStep.USAGE_STATS -> 0.33f
-                        PermissionStep.OVERLAY -> 0.66f
-                        PermissionStep.ACCESSIBILITY -> 1f
+                        PermissionStep.USAGE_STATS -> 0.25f
+                        PermissionStep.OVERLAY -> 0.5f
+                        PermissionStep.ACCESSIBILITY -> 0.75f
+                        PermissionStep.BATTERY_OPTIMIZATION -> 1f
                         else -> 1f
                     }
 
@@ -1092,8 +1252,9 @@ fun ModernPermissionDialog(
                                 PermissionStep.USAGE_STATS -> "1"
                                 PermissionStep.OVERLAY -> "2"
                                 PermissionStep.ACCESSIBILITY -> "3"
-                                else -> "3"
-                            }} of 3",
+                                PermissionStep.BATTERY_OPTIMIZATION -> "4"
+                                else -> "4"
+                            }} of 4",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontWeight = FontWeight.Medium
                             ),
@@ -1169,7 +1330,7 @@ fun ModernPermissionDialog(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                "Enable",
+                                buttonText,
                                 color = Color.White,
                                 fontWeight = FontWeight.SemiBold,
                                 style = MaterialTheme.typography.bodyMedium

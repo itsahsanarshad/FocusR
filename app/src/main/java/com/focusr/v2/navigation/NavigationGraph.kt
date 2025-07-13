@@ -71,6 +71,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.focusr.v2.AppInfo
 import com.focusr.v2.AppManager
+import com.focusr.v2.MainActivity
 import com.focusr.v2.PreferencesManager
 import com.focusr.v2.ui.screens.ModernAppSelectionScreen
 import com.focusr.v2.ui.screens.HomeScreen
@@ -106,7 +107,8 @@ fun NavigationGraph(
     ) {
 
         composable(Screen.Home.route) {
-            val activity = LocalContext.current as ComponentActivity
+            //val activity = LocalContext.current as ComponentActivity
+            val activity = LocalContext.current as MainActivity
             HomeScreen(
                 activity = activity,
                 navController = navController

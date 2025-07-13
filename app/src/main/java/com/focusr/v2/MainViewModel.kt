@@ -71,4 +71,10 @@ class MainViewModel(
             preferencesManager.setBlockingEnabled(enabled)
         }
     }
+
+    fun setWasBlockingEnabledBeforeReboot(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setWasBlockingEnabledBeforeReboot(enabled)
+        }
+    }
 }

@@ -1,4 +1,5 @@
 package com.focusr.v2
+import android.annotation.SuppressLint
 import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
@@ -6,6 +7,9 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import android.os.PowerManager
+import androidx.core.net.toUri
+
 
 object PermissionHelper {
 
@@ -44,9 +48,22 @@ object PermissionHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${activity.packageName}")
+                "package:${activity.packageName}".toUri()
             )
             activity.startActivity(intent)
         }
+    }
+
+    fun hasIgnoreBatteryOptimizationsPermission(context: Context): Boolean {
+        val pm = context.getSystemService(PowerManager::class.java)
+        return pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+    }
+
+    @SuppressLint("BatteryLife")
+    fun requestIgnoreBatteryOptimizations(context: Context) {
+        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
     }
 }

@@ -19,6 +19,8 @@ class PreferencesManager(private val context: Context) {
         private val BLOCKED_APPS_KEY = stringSetPreferencesKey("blocked_apps")
         private val BLOCKING_ENABLED_KEY = booleanPreferencesKey("blocking_enabled")
         private val BLOCKING_START_TIME_KEY = longPreferencesKey("blocking_start_time")
+        private val WAS_BLOCKING_ENABLED_BEFORE_REBOOT_KEY = booleanPreferencesKey("was_blocking_enabled_before_reboot")
+
 
     }
 
@@ -52,6 +54,11 @@ class PreferencesManager(private val context: Context) {
 
     val blockingStartTime: Flow<Long?> = context.dataStore.data.map { preferences ->
         preferences[BLOCKING_START_TIME_KEY]
+    }
+
+    // Add this flow to read the boot restore flag
+    val wasBlockingEnabledBeforeReboot: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[WAS_BLOCKING_ENABLED_BEFORE_REBOOT_KEY] ?: false
     }
 
     // Functions for writing preferences
@@ -94,6 +101,13 @@ class PreferencesManager(private val context: Context) {
             } else {
                 preferences.remove(BLOCKING_START_TIME_KEY)
             }
+        }
+    }
+
+    // Add this function to set the boot restore flag
+    suspend fun setWasBlockingEnabledBeforeReboot(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[WAS_BLOCKING_ENABLED_BEFORE_REBOOT_KEY] = enabled
         }
     }
 
