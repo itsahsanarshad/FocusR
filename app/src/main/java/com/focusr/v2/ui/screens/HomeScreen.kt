@@ -66,17 +66,22 @@ import com.focusr.v2.AppManager
 import com.focusr.v2.AppMonitoringService
 //import com.focusr.v2.FocusBlockerAccessibilityService
 import com.focusr.v2.MainActivity
+import com.focusr.v2.MainUiState
 import com.focusr.v2.MainViewModel
 import com.focusr.v2.PermissionHelper
 import com.focusr.v2.PermissionHelper.hasIgnoreBatteryOptimizationsPermission
 import com.focusr.v2.PermissionHelper.requestIgnoreBatteryOptimizations
 import com.focusr.v2.PreferencesManager
 import com.focusr.v2.R
-import com.focusr.v2.ServiceScheduler
+//import com.focusr.v2.ServiceScheduler
 import com.focusr.v2.navigation.Screen
 import com.focusr.v2.ui.components.ModernTimeButton
 import com.focusr.v2.ui.components.ModernTimePickerDialog
 import com.focusr.v2.ui.components.ModernTopBar
+import com.focusr.v2.ServiceManager
+import com.focusr.v2.ui.components.ActiveFeaturesCard
+import com.focusr.v2.ui.components.CompactActiveFeaturesCard
+
 enum class PermissionStep {
     USAGE_STATS,
     OVERLAY,
@@ -92,8 +97,11 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preferencesManager = remember(context) { PreferencesManager(context.applicationContext) }
+    val serviceManager = remember(context) { ServiceManager(context.applicationContext) }
     val viewModel: MainViewModel = viewModel { MainViewModel(preferencesManager) }
     var onResumeCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
+//    val serviceManager = ServiceManager(context)
+
 
     val uiState by viewModel.uiState.collectAsState()
 
@@ -105,6 +113,10 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
     var currentPermissionStep by remember { mutableStateOf(PermissionStep.COMPLETED) }
     var isWaitingForPermission by remember { mutableStateOf(false) }
     val advancedMode = uiState.advancedMode
+
+    var expanded by remember { mutableStateOf(false) }
+    var selectedView by remember { mutableStateOf("Full") }
+
 
     val fromTimeState = rememberTimePickerState(
         initialHour = uiState.fromTime.first,
@@ -311,6 +323,8 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
                                 val hasBatteryOptimization = hasIgnoreBatteryOptimizationsPermission(context)
 
 
+
+
                                 showTimeValidationMessage(context, uiState.fromTime, uiState.toTime, uiState.advancedMode)
 
                                 when {
@@ -336,44 +350,53 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
                                     }
                                     else -> {
                                         // All permissions granted — call your main function here
-                                        if(!advancedMode){
-                                            scope.launch {
-                                                viewModel.setBlockingEnabled(true)
-                                                preferencesManager.setBlockingStartTime(System.currentTimeMillis())
-                                                delay(100)
-                                                startMonitoringService()
-                                                Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
 
-                                        }
-                                        }
-                                        else {
-                                            activity.onBlockingToggled(true)
-                                            Toast.makeText(
-                                                context,
-                                                "FocusR Service Started.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
+                                        scope.launch {
+                                            serviceManager.toggleBlocking(true)
+                                            viewModel.setBlockingEnabled(true)                                        }
+
+//                                        if(!advancedMode){
+//                                            scope.launch {
+//                                                viewModel.setBlockingEnabled(true)
+//                                                preferencesManager.setBlockingStartTime(System.currentTimeMillis())
+//                                                delay(100)
+//                                                startMonitoringService()
+//                                                Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
+//
+//                                        }
+//                                        }
+//                                        else {
+//                                            activity.onBlockingToggled(true)
+//                                            Toast.makeText(
+//                                                context,
+//                                                "FocusR Service Started.",
+//                                                Toast.LENGTH_SHORT
+//                                            ).show()
+//                                        }
 
                                     }
                                 }
                             } else {
-                                if (!advancedMode){
-                                    scope.launch {
-                                    viewModel.setBlockingEnabled(false)
-                                    stopMonitoringService()
-                                    Toast.makeText(context, "FocusR Service Stopped.", Toast.LENGTH_SHORT).show()
-                                }
-                                }
-                                else {
-                                    // Disable blocking
-                                    activity.onBlockingToggled(false)
-                                    Toast.makeText(
-                                        context,
-                                        "FocusR Service Stopped.",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
+
+                                scope.launch {
+                                    serviceManager.toggleBlocking(false)
+                                    viewModel.setBlockingEnabled(false)                                }
+//                                if (!advancedMode){
+//                                    scope.launch {
+//                                    viewModel.setBlockingEnabled(false)
+//                                    stopMonitoringService()
+//                                    Toast.makeText(context, "FocusR Service Stopped.", Toast.LENGTH_SHORT).show()
+//                                }
+//                                }
+//                                else {
+//                                    // Disable blocking
+//                                    activity.onBlockingToggled(false)
+//                                    Toast.makeText(
+//                                        context,
+//                                        "FocusR Service Stopped.",
+//                                        Toast.LENGTH_SHORT
+//                                    ).show()
+//                                }
                             }
                         },
                         glassCard = glassCard,
@@ -383,48 +406,73 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
                     )
                 }
 
+//                item {  // can be safely removed
+//                    ModernSettingsSection(
+//                        advancedMode = uiState.advancedMode,
+//                        fromTime = uiState.fromTime,
+//                        toTime = uiState.toTime,
+////                        onAdvancedModeToggle = { scope.launch { viewModel.setAdvancedMode(it) } },
+//
+//                        // Replace your existing onAdvancedModeToggle callback with this:
+//                        onAdvancedModeToggle = { newAdvancedMode ->
+//                            scope.launch {
+//                                // Reset everything
+//                                    serviceManager.toggleBlocking(false)
+//                                    viewModel.setBlockingEnabled(false)
+//
+//                                // Update the mode
+//                                viewModel.setAdvancedMode(newAdvancedMode)
+//
+//
+//                                if(uiState.blockingEnabled){
+//                                // Inform user
+//                                Toast.makeText(
+//                                    context,
+//                                    "Mode changed. Service stopped and reset. Please configure and start again.",
+//                                    Toast.LENGTH_SHORT
+//                                ).show()}
+//                            }
+//                        },
+//                        onFromTimeClick = {
+//                            isFromPicker = true
+//                            showTimePicker = true
+//                        },
+//                        onToTimeClick = {
+//                            isFromPicker = false
+//                            showTimePicker = true
+//                        },
+//                        glassCard = glassCard,
+//                        selectedGlassCard = selectedGlassCard,
+//                        primaryAccent = primaryAccent,
+//                        secondaryAccent = secondaryAccent
+//                    )
+//                }
+
+//                item {  //Can be removed safely
+//                    ActiveFeaturesCard(
+//                        uiState = uiState,
+//                        onSettingsClick = {
+//                            navController.navigate("blocking_mechanism")
+//                        },
+//                        glassCard = glassCard,
+//                        selectedGlassCard = selectedGlassCard,
+//                        primaryAccent = primaryAccent,
+//                        secondaryAccent = secondaryAccent
+//                    )
+//                }
+
                 item {
-                    ModernSettingsSection(
-                        advancedMode = uiState.advancedMode,
-                        fromTime = uiState.fromTime,
-                        toTime = uiState.toTime,
-//                        onAdvancedModeToggle = { scope.launch { viewModel.setAdvancedMode(it) } },
-
-                        // Replace your existing onAdvancedModeToggle callback with this:
-                        onAdvancedModeToggle = { newAdvancedMode ->
-                            scope.launch {
-                                // Reset everything
-                                viewModel.setBlockingEnabled(false)
-                                val serviceScheduler = ServiceScheduler(context)
-                                serviceScheduler.resetService()
-
-                                // Update the mode
-                                viewModel.setAdvancedMode(newAdvancedMode)
-
-
-                                if(uiState.blockingEnabled){
-                                // Inform user
-                                Toast.makeText(
-                                    context,
-                                    "Mode changed. Service stopped and reset. Please configure and start again.",
-                                    Toast.LENGTH_SHORT
-                                ).show()}
-                            }
-                        },
-                        onFromTimeClick = {
-                            isFromPicker = true
-                            showTimePicker = true
-                        },
-                        onToTimeClick = {
-                            isFromPicker = false
-                            showTimePicker = true
-                        },
+                    ActiveFeaturesCardSwitcher(
+                        uiState = uiState,
+                        navController = navController,
                         glassCard = glassCard,
                         selectedGlassCard = selectedGlassCard,
                         primaryAccent = primaryAccent,
                         secondaryAccent = secondaryAccent
                     )
                 }
+
+
 
                 item {
                     ModernBlockedAppsSection(
@@ -466,8 +514,8 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
                             // Always stop and reset service if it was running (for both simple and advanced mode)
                             if (wasRunning) {
                                 viewModel.setBlockingEnabled(false)
-                                val serviceScheduler = ServiceScheduler(context)
-                                serviceScheduler.resetService()
+                                serviceManager.toggleBlocking(false)
+
                             }
 
                             // Update the time variables and viewModel
@@ -538,6 +586,50 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
         }
     }
 }
+
+@Composable
+fun ActiveFeaturesCardSwitcher(
+    uiState: MainUiState,
+    navController: NavController,
+    glassCard: Color,
+    selectedGlassCard: Color,
+    primaryAccent: Color,
+    secondaryAccent: Color
+) {
+    var isExpanded by remember { mutableStateOf(false) } // false = Compact, true = Full
+
+    // Clickable wrapper that toggles between modes
+    Column(
+        modifier = Modifier.clickable {
+            isExpanded = !isExpanded
+        }
+    ) {
+        // Show composable based on expanded state
+        if (isExpanded) {
+            ActiveFeaturesCard(
+                uiState = uiState,
+                onSettingsClick = {
+                    navController.navigate("blocking_mechanism")
+                },
+                glassCard = glassCard,
+                selectedGlassCard = selectedGlassCard,
+                primaryAccent = primaryAccent,
+                secondaryAccent = secondaryAccent
+            )
+        } else {
+            CompactActiveFeaturesCard(
+                uiState = uiState,
+                onSettingsClick = {
+                    navController.navigate("blocking_mechanism")
+                },
+                glassCard = glassCard,
+                primaryAccent = primaryAccent
+            )
+        }
+    }
+}
+
+
 
 @Composable
 fun ModernStatusCard(

@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +42,11 @@ fun BottomNavBar(navController: NavHostController) {
             name = "Apps",
             route = Screen.AppSelection.route,
             icon = Icons.Default.Apps
+        ),
+        BottomNavItem(
+            name = "Timer Setting",
+            route = Screen.BlockingMechanismScreen.route,
+            icon = Icons.Default.Timer
         )
     )
 
@@ -120,16 +127,31 @@ fun BottomNavBar(navController: NavHostController) {
                                     )
                                 }
                             )
+//                            .clickable {
+//                                navController.navigate(item.route) {
+//                                    popUpTo(navController.graph.startDestinationId) {
+//                                        saveState = true
+//                                    }
+//                                    launchSingleTop = true
+//                                    restoreState = true
+//                                }
+//                            },
                             .clickable {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+                                if (currentRoute != item.route) {
+                                    navController.navigate(item.route) {
+                                        // Only pop up to startDestination if it's Home
+                                        if(item.route == Screen.BlockingMechanismScreen.route){
+                                            popUpTo(navController.graph.startDestinationId) {
+                                                saveState = true
+                                            }
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
                             },
-                        contentAlignment = Alignment.Center
+
+                                contentAlignment = Alignment.Center
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,

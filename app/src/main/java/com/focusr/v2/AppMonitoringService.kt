@@ -1185,6 +1185,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.focusr.v2.data.TimerFeature
 
 class AppMonitoringService : Service() {
 
@@ -1197,6 +1198,9 @@ class AppMonitoringService : Service() {
     private var notificationRunnable: Runnable? = null
     private var lastDetectedApp: String? = null
 
+    private lateinit var enhancedBlockingTimeManager: BlockingTimeManager
+
+
     companion object {
         const val CHANNEL_ID = "focus_blocker_channel"
         const val NOTIFICATION_ID = 1
@@ -1206,6 +1210,8 @@ class AppMonitoringService : Service() {
         super.onCreate()
         preferencesManager = PreferencesManager(this)
         blockingTimeManager = BlockingTimeManager(preferencesManager)
+
+
         createNotificationChannel()
     }
 
@@ -1218,7 +1224,7 @@ class AppMonitoringService : Service() {
             startNotificationUpdates()
         }
         startMonitoring()
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun startMonitoring() {
@@ -1233,6 +1239,39 @@ class AppMonitoringService : Service() {
         handler.post(monitoringRunnable!!)
     }
 
+//    private suspend fun checkCurrentApp() {
+//        try {
+//            val blockingEnabled = preferencesManager.blockingEnabled.first()
+//            if (!blockingEnabled) return
+//
+//            val blockedApps = preferencesManager.blockedApps.first()
+//            if (blockedApps.isEmpty()) return
+//
+//            // Step 1: Capture the current foreground app BEFORE anything
+//            val currentApp = getCurrentForegroundApp()
+//            lastDetectedApp = currentApp
+//            Log.d("blockerdebugams", "Foreground app detected: $currentApp")
+//            delay(100)
+//
+//            // Step 2: Only block AFTER verifying
+//            if (currentApp != null && blockedApps.contains(currentApp)) {
+//                if (blockingTimeManager.isInBlockingHours()) {
+//                    blockApp(currentApp)
+//                }
+//            }
+//
+//            if (blockingTimeManager.hasExceededToTime()) {
+//                preferencesManager.setBlockingEnabled(false)
+//                stopSelf()
+//                return
+//            }
+//
+//        } catch (e: Exception) {
+//            Log.e("BlockerDebug", "Error: ${e.message}")
+//        }
+//    }
+
+    // Modify your checkCurrentApp() method
     private suspend fun checkCurrentApp() {
         try {
             val blockingEnabled = preferencesManager.blockingEnabled.first()
@@ -1241,16 +1280,21 @@ class AppMonitoringService : Service() {
             val blockedApps = preferencesManager.blockedApps.first()
             if (blockedApps.isEmpty()) return
 
-            // Step 1: Capture the current foreground app BEFORE anything
             val currentApp = getCurrentForegroundApp()
             lastDetectedApp = currentApp
             Log.d("blockerdebugams", "Foreground app detected: $currentApp")
             delay(100)
 
-            // Step 2: Only block AFTER verifying
             if (currentApp != null && blockedApps.contains(currentApp)) {
+                // Use enhanced manager but fallback to old one if needed
                 if (blockingTimeManager.isInBlockingHours()) {
                     blockApp(currentApp)
+
+                    // ADD this for daily usage tracking
+                    val timerSettings = preferencesManager.timerSettings.first()
+                    if (timerSettings.enabledFeatures.contains(TimerFeature.DAILY_USAGE_LIMIT)) {
+                        preferencesManager.updateDailyUsage(1) // 1 minute increment
+                    }
                 }
             }
 
@@ -1259,12 +1303,16 @@ class AppMonitoringService : Service() {
                 stopSelf()
                 return
             }
-
         } catch (e: Exception) {
             Log.e("BlockerDebug", "Error: ${e.message}")
+            // Fallback to old system if there's any error
+            if (blockingTimeManager.hasExceededToTime()) {
+                preferencesManager.setBlockingEnabled(false)
+                stopSelf()
+                return
+            }
         }
     }
-
     private fun getCurrentForegroundApp(): String? {
         val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val time = System.currentTimeMillis()
@@ -1303,8 +1351,24 @@ class AppMonitoringService : Service() {
         notificationManager.createNotificationChannel(channel)
     }
 
+//    private suspend fun buildNotification(): Notification {
+//        val message = blockingTimeManager.getDynamicNotificationMessage()
+//        return NotificationCompat.Builder(this, CHANNEL_ID)
+//            .setContentTitle("Focus Blocker")
+//            .setContentText(message)
+//            .setSmallIcon(R.drawable.ic_launcher_foreground)
+//            .setOngoing(true)
+//            .build()
+//    }
+
+    // Update notification building
     private suspend fun buildNotification(): Notification {
-        val message = blockingTimeManager.getDynamicNotificationMessage()
+        val message = try {
+            enhancedBlockingTimeManager.getDynamicNotificationMessage()
+        } catch (e: Exception) {
+            blockingTimeManager.getDynamicNotificationMessage() // Fallback
+        }
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Focus Blocker")
             .setContentText(message)
@@ -1331,13 +1395,35 @@ class AppMonitoringService : Service() {
         notificationRunnable?.let { notificationHandler.removeCallbacks(it) }
     }
 
+//    override fun onDestroy() {
+//        super.onDestroy()
+//        // Reset timing flags when service stops
+//        blockingTimeManager.resetFlags()
+//
+//        stopNotificationUpdates()
+//        monitoringRunnable?.let { handler.removeCallbacks(it) }
+//        serviceScope.cancel()
+//    }
+
     override fun onDestroy() {
         super.onDestroy()
+
+        Log.d("ServiceDebug", "Service onDestroy called")
+
+        // IMPORTANT: Stop foreground service properly with new API
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE) // or STOP_FOREGROUND_DETACH
+        } catch (e: Exception) {
+            Log.e("ServiceDebug", "Error stopping foreground: ${e.message}")
+        }
+
         // Reset timing flags when service stops
         blockingTimeManager.resetFlags()
 
         stopNotificationUpdates()
         monitoringRunnable?.let { handler.removeCallbacks(it) }
         serviceScope.cancel()
+
+        Log.d("ServiceDebug", "Service cleanup completed")
     }
 }

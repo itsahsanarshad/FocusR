@@ -66,6 +66,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -73,8 +74,12 @@ import com.focusr.v2.AppInfo
 import com.focusr.v2.AppManager
 import com.focusr.v2.MainActivity
 import com.focusr.v2.PreferencesManager
+import com.focusr.v2.TimerSettingsScreen
 import com.focusr.v2.ui.screens.ModernAppSelectionScreen
 import com.focusr.v2.ui.screens.HomeScreen
+//import com.focusr.v2.EnhancedMainViewModel
+import com.focusr.v2.MainViewModel
+import com.focusr.v2.ServiceManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
@@ -85,6 +90,7 @@ fun NavigationGraph(
 ) {
     val context = LocalContext.current
     val preferencesManager = remember { PreferencesManager(context) }
+    val serviceManager = remember { ServiceManager(context) }
 
     // Installed apps
     var allApps by remember { mutableStateOf(emptyList<AppInfo>()) }
@@ -127,6 +133,15 @@ fun NavigationGraph(
                     }
                     navController.popBackStack()
                 }
+            )
+        }
+        composable(Screen.BlockingMechanismScreen.route) {
+            //val activity = LocalContext.current as ComponentActivity
+            val activity = LocalContext.current as MainActivity
+            val viewModel: MainViewModel = viewModel { MainViewModel(preferencesManager) }
+            TimerSettingsScreen(
+                viewModel = viewModel, // Use your enhanced ViewModel
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }

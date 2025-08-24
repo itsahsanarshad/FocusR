@@ -218,7 +218,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private var onResumeCallback: (() -> Unit)? = null
     private lateinit var preferencesManager: PreferencesManager
-    private lateinit var serviceScheduler: ServiceScheduler
+//    private lateinit var serviceScheduler: ServiceScheduler
     private lateinit var blockingTimeManager: BlockingTimeManager
 
     fun setOnResumeCallback(callback: () -> Unit) {
@@ -230,7 +230,7 @@ class MainActivity : ComponentActivity() {
 
         // Initialize preferences and managers
         preferencesManager = PreferencesManager(this)
-        serviceScheduler = ServiceScheduler(this)
+//        serviceScheduler = ServiceScheduler(this)
         blockingTimeManager = BlockingTimeManager(preferencesManager)
 
         // Enable edge-to-edge display
@@ -279,23 +279,23 @@ class MainActivity : ComponentActivity() {
         // Clean up if needed
     }
 
-    // Function to handle blocking toggle from UI components
-    fun onBlockingToggled(enabled: Boolean) {
-        lifecycleScope.launch {
-            preferencesManager.setBlockingEnabled(enabled)
-            if (enabled) {
-                // Schedule service to start at appropriate time
-                serviceScheduler.scheduleService()
-                // Show user when blocking will start using unified logic
-                showBlockingScheduleMessage()
-            } else {
-                // Stop service and cancel scheduled starts
-                serviceScheduler.cancelScheduledService()
-                stopService(Intent(this@MainActivity, AppMonitoringService::class.java))
-                Toast.makeText(this@MainActivity, "Blocking disabled", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
+    // Function to handle blocking toggle from UI components can be deleted safely
+//    fun onBlockingToggled(enabled: Boolean) {
+//        lifecycleScope.launch {
+//            preferencesManager.setBlockingEnabled(enabled)
+//            if (enabled) {
+//                // Schedule service to start at appropriate time
+//                serviceScheduler.scheduleService()
+//                // Show user when blocking will start using unified logic
+//                showBlockingScheduleMessage()
+//            } else {
+//                // Stop service and cancel scheduled starts
+//                serviceScheduler.resetService()
+//                stopService(Intent(this@MainActivity, AppMonitoringService::class.java))
+//                Toast.makeText(this@MainActivity, "Blocking disabled AD", Toast.LENGTH_SHORT).show()
+//            }
+//        }
+//    }
 
     private suspend fun showBlockingScheduleMessage() {
         val message = blockingTimeManager.getBlockingScheduleMessage()
