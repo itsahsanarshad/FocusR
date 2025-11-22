@@ -43,9 +43,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.first
-import java.util.*
 
 class BootReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -55,50 +54,29 @@ class BootReceiver : BroadcastReceiver() {
             intent.action == "android.intent.action.QUICKBOOT_POWERON") {
 
             val preferencesManager = PreferencesManager(context)
+            val blockingTimeManager = BlockingTimeManager(preferencesManager)
 
             scope.launch {
-                val wasBlockingEnabled = preferencesManager.wasBlockingEnabledBeforeReboot.first()
-                val advancedMode = preferencesManager.advancedMode.first()
-                val fromTime = preferencesManager.fromTime.first() // Pair<Int, Int>
-                val toTime = preferencesManager.toTime.first()     // Pair<Int, Int>
+                // Perform migration if needed
+                preferencesManager.migrateOldBlockedApps()
+                
+                // Check if any rules are currently active
+                val activeRulesCount = blockingTimeManager.getActiveRulesCount()
 
-                val now = Calendar.getInstance()
-                val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-                val fromMinutes = fromTime.first * 60 + fromTime.second
-                val toMinutes = toTime.first * 60 + toTime.second
-
-                val sessionStillValid = if (!advancedMode) {
-                    currentMinutes in (fromMinutes..toMinutes)
-                } else {
-                    // Handle overnight: e.g. 10PM to 4AM
-                    if (fromMinutes > toMinutes) {
-                        currentMinutes >= fromMinutes || currentMinutes <= toMinutes
-                    } else {
-                        currentMinutes in (fromMinutes..toMinutes)
-                    }
-                }
-
-                if (wasBlockingEnabled && sessionStillValid) {
-                    preferencesManager.setBlockingEnabled(true)
-
+                if (activeRulesCount > 0) {
+                    Log.d("BootReceiver", "Found $activeRulesCount active rules after boot, starting service")
+                    
                     Handler(Looper.getMainLooper()).postDelayed({
                         try {
                             val serviceIntent = Intent(context, AppMonitoringService::class.java)
                             context.startForegroundService(serviceIntent)
+                            Log.d("BootReceiver", "Service started successfully")
                         } catch (e: Exception) {
-                            try {
-                                val fallbackIntent = Intent(context, AppMonitoringService::class.java)
-                                context.startService(fallbackIntent)
-                            } catch (e2: Exception) {
-                                scope.launch {
-                                    preferencesManager.setBlockingEnabled(false)
-                                }
-                            }
+                            Log.e("BootReceiver", "Failed to start service: ${e.message}")
                         }
                     }, 3000) // Delay slightly after boot
                 } else {
-                    // Session expired – don't resume
-                    preferencesManager.setBlockingEnabled(false)
+                    Log.d("BootReceiver", "No active rules after boot, service not started")
                 }
             }
         }

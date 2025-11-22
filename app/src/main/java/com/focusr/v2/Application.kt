@@ -17,19 +17,12 @@
 //
 //        // Turn off toggle when app process starts
 //        val preferencesManager = PreferencesManager(this)
-//        applicationScope.launch {
-//            preferencesManager.setBlockingEnabled(false)
-//        }
-//    }
-//}
-
 package com.focusr.v2
 
 import android.app.Application
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,23 +35,22 @@ class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Check if we're currently in a blocking session and start service if needed
         val preferencesManager = PreferencesManager(this)
         val blockingTimeManager = BlockingTimeManager(preferencesManager)
 
         applicationScope.launch {
-            if (blockingTimeManager.isCurrentlyInBlockingSession()) {
-                // Enable blocking and start the monitoring service
-                preferencesManager.setBlockingEnabled(true)
-                preferencesManager.setBlockingStartTime(System.currentTimeMillis())
-
+            // Perform migration from old system to new rule-based system
+            preferencesManager.migrateOldBlockedApps()
+            
+            // Check if any rules are currently active
+            val activeRulesCount = blockingTimeManager.getActiveRulesCount()
+            
+            if (activeRulesCount > 0) {
+                Log.d("MyApplication", "Found $activeRulesCount active rules, starting service")
                 // Start the app monitoring service
                 startAppMonitoringService()
-
-                // Show confirmation toast on main thread
-                launch(Dispatchers.Main) {
-                    Toast.makeText(this@MyApplication, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
-                }
+            } else {
+                Log.d("MyApplication", "No active rules, service not started")
             }
         }
     }
@@ -73,8 +65,9 @@ class MyApplication : Application() {
             } else {
                 startService(serviceIntent)
             }
+            
+            Log.d("MyApplication", "AppMonitoringService started successfully")
         } catch (e: Exception) {
-            // Log error or handle service start failure
             Log.e("MyApplication", "Failed to start monitoring service", e)
         }
     }
