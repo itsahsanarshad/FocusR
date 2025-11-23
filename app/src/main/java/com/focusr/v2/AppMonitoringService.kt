@@ -85,12 +85,27 @@ class AppMonitoringService : Service() {
             }
             
             // NEW: Stop service if no rules are currently active
-            val activeRulesCount = blockingTimeManager.getActiveRulesCount()
-            if (activeRulesCount == 0) {
-                Log.d("AppMonitoringService", "No active rules, stopping service")
-                stopSelf()
-                return
-            }
+          //  val activeRulesCount = blockingTimeManager.getActiveRulesCount()
+       //     if (activeRulesCount == 0) {
+      //          Log.d("AppMonitoringService", "No active rules, stopping service")
+     //           stopSelf()
+     //           return
+     //       }
+
+     // FIXED: Only stop if NO rules exist at all (not just if none are active)
+val allRules = preferencesManager.blockingRules.first()
+val enabledRules = allRules.filter { it.enabled }
+
+if (enabledRules.isEmpty()) {
+    Log.d("AppMonitoringService", "No enabled rules exist, stopping service")
+    stopSelf()
+    return
+}
+
+// If we have enabled rules but none are active, keep running
+// (they might become active soon, e.g., SCHEDULED rules)
+val activeRulesCount = blockingTimeManager.getActiveRulesCount()
+Log.d("AppMonitoringService", "Enabled rules: ${enabledRules.size}, Active rules: $activeRulesCount")
 
         } catch (e: Exception) {
             Log.e("AppMonitoringService", "Error in checkCurrentApp: ${e.message}")

@@ -17,7 +17,8 @@ data class RuleUiState(
 
 class RuleViewModel(
     private val preferencesManager: PreferencesManager,
-    private val blockingTimeManager: BlockingTimeManager
+    private val blockingTimeManager: BlockingTimeManager,
+    private val context: android.content.Context  // NEW
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RuleUiState())
@@ -41,6 +42,16 @@ class RuleViewModel(
     }
 
     /**
+     * Schedule service based on current rules
+     */
+    private fun scheduleServiceIfNeeded() {
+        viewModelScope.launch {
+            val scheduler = com.focusr.v2.ServiceScheduler(context)
+            scheduler.scheduleService()
+        }
+    }
+
+    /**
      * Get all rules for a specific app (updated for multi-app support)
      */
     fun getRulesForApp(packageName: String): Flow<List<BlockingRule>> {
@@ -52,25 +63,27 @@ class RuleViewModel(
     /**
      * Add a new blocking rule
      */
-    fun addRule(rule: BlockingRule) {
-        viewModelScope.launch {
-            preferencesManager.addRule(rule)
-        }
+  fun addRule(rule: BlockingRule) {
+    viewModelScope.launch {
+        preferencesManager.addRule(rule)
+        scheduleServiceIfNeeded()  // NEW
     }
+}
     
     /**
      * Add or update a rule (convenience method)
      */
-    fun addOrUpdateRule(rule: BlockingRule) {
-        viewModelScope.launch {
-            val existingRule = _uiState.value.allRules.find { it.id == rule.id }
-            if (existingRule != null) {
-                preferencesManager.updateRule(rule)
-            } else {
-                preferencesManager.addRule(rule)
-            }
+  fun addOrUpdateRule(rule: BlockingRule) {
+    viewModelScope.launch {
+        val existingRule = _uiState.value.allRules.find { it.id == rule.id }
+        if (existingRule != null) {
+            preferencesManager.updateRule(rule)
+        } else {
+            preferencesManager.addRule(rule)
         }
+        scheduleServiceIfNeeded()  // NEW
     }
+}
 
     /**
      * Update an existing rule
@@ -85,22 +98,24 @@ class RuleViewModel(
      * Delete a rule by ID
      */
     fun deleteRule(ruleId: String) {
-        viewModelScope.launch {
-            preferencesManager.removeRule(ruleId)
-        }
+    viewModelScope.launch {
+        preferencesManager.removeRule(ruleId)
+        scheduleServiceIfNeeded()  // NEW
     }
+}
 
     /**
      * Toggle rule enabled/disabled
      */
-    fun toggleRuleEnabled(ruleId: String) {
-        viewModelScope.launch {
-            val rule = _uiState.value.allRules.find { it.id == ruleId }
-            rule?.let {
-                preferencesManager.updateRule(it.copy(enabled = !it.enabled))
-            }
+   fun toggleRuleEnabled(ruleId: String) {
+    viewModelScope.launch {
+        val rule = _uiState.value.allRules.find { it.id == ruleId }
+        rule?.let {
+            preferencesManager.updateRule(it.copy(enabled = !it.enabled))
+            scheduleServiceIfNeeded()  // NEW
         }
     }
+}
 
     /**
      * Check if an app should currently be blocked

@@ -337,7 +337,7 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
     /**
      * Check if a specific rule is currently active
      */
-    private fun isRuleActive(rule: com.focusr.v2.models.BlockingRule): Boolean {
+     fun isRuleActive(rule: com.focusr.v2.models.BlockingRule): Boolean {
         return when (rule.ruleType) {
             com.focusr.v2.models.RuleType.SIMPLE -> checkSimpleRule(rule)
             com.focusr.v2.models.RuleType.SCHEDULED -> checkScheduledRule(rule)

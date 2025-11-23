@@ -33,9 +33,9 @@ fun NavigationGraph(
     val blockingTimeManager = remember { BlockingTimeManager(preferencesManager) }
     
     // Shared RuleViewModel
-    val ruleViewModel: RuleViewModel = viewModel {
-        RuleViewModel(preferencesManager, blockingTimeManager)
-    }
+   val ruleViewModel: RuleViewModel = viewModel {
+    RuleViewModel(preferencesManager, blockingTimeManager, context)  // Added context
+}
 
     // Installed apps
     var allApps by remember { mutableStateOf(emptyList<AppInfo>()) }
