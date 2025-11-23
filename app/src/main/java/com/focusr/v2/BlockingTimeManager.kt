@@ -307,14 +307,32 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
     /**
      * Check if a specific app should be blocked based on its rules
      */
-    suspend fun shouldBlockApp(packageName: String): Boolean {
-        val rules = preferencesManager.getRulesForApp(packageName)
-        
-        // App should be blocked if ANY of its enabled rules are currently active
-        return rules.any { rule ->
-            rule.enabled && isRuleActive(rule)
+   suspend fun shouldBlockApp(packageName: String): Boolean {
+    val allRules = preferencesManager.blockingRules.first()
+    
+    Log.d("BlockingTimeManager", "=== Checking $packageName ===")
+    Log.d("BlockingTimeManager", "Total rules: ${allRules.size}")
+    
+    // Get all rules that apply to this app
+    val applicableRules = allRules.filter { rule ->
+        rule.enabled && rule.getApps().contains(packageName)
+    }.sortedBy { it.calculatePriority() }
+    
+    Log.d("BlockingTimeManager", "Applicable rules: ${applicableRules.size}")
+    
+    // Check rules in priority order
+    for (rule in applicableRules) {
+        val isActive = isRuleActive(rule)
+        Log.d("BlockingTimeManager", "Rule '${rule.getDisplayName()}' (${rule.ruleType}): active=$isActive")
+        if (isActive) {
+            Log.d("BlockingTimeManager", "✓ BLOCKING $packageName")
+            return true
         }
     }
+    
+    Log.d("BlockingTimeManager", "✗ NOT blocking $packageName")
+    return false
+}
     
     /**
      * Check if a specific rule is currently active

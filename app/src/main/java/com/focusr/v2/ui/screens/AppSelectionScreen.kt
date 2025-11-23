@@ -8,6 +8,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -27,27 +28,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.focusr.v2.AppInfo
+import com.focusr.v2.models.BlockingRule
+import com.focusr.v2.navigation.Screen
+import com.focusr.v2.ui.viewmodels.RuleViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModernAppSelectionScreen(
     onBackClick: () -> Unit,
-    onAppsSelected: (Set<String>) -> Unit,
-    currentBlockedApps: Set<String>,
+    navController: NavController,
+    ruleViewModel: RuleViewModel,
     availableApps: List<AppInfo>
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var selectedApps by remember { mutableStateOf(currentBlockedApps) }
-    var showSearchBar by remember { mutableStateOf(false) }
-
-    // Create app map for quick lookup
-    val appMap = remember(availableApps) {
-        availableApps.associateBy { it.packageName }
+    
+    // Collect rules state
+    val rulesState by ruleViewModel.uiState.collectAsState()
+    val rulesByPackage = remember(rulesState.allRules) {
+        rulesState.allRules.groupBy { it.packageName }
     }
 
-    // Filter and sort apps with animation
+    // Filter apps
     val filteredApps = remember(availableApps, searchQuery) {
         if (searchQuery.isEmpty()) {
             availableApps
@@ -59,13 +63,13 @@ fun ModernAppSelectionScreen(
         }
     }
 
-    // Separate and sort apps: selected first, then unselected
-    val (selectedAppsList, unselectedAppsList) = remember(filteredApps, selectedApps) {
-        val selected = filteredApps.filter { selectedApps.contains(it.packageName) }
+    // Separate apps with rules from apps without rules
+    val (appsWithRules, appsWithoutRules) = remember(filteredApps, rulesByPackage) {
+        val withRules = filteredApps.filter { rulesByPackage[it.packageName]?.isNotEmpty() == true }
             .sortedBy { it.appName.lowercase() }
-        val unselected = filteredApps.filter { !selectedApps.contains(it.packageName) }
+        val withoutRules = filteredApps.filter { rulesByPackage[it.packageName]?.isEmpty() != false }
             .sortedBy { it.appName.lowercase() }
-        Pair(selected, unselected)
+        Pair(withRules, withoutRules)
     }
 
     // Modern gradient background
@@ -112,14 +116,6 @@ fun ModernAppSelectionScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-//                        .background(
-//                            brush = Brush.horizontalGradient(
-//                                colors = listOf(
-//                                    Color.Transparent,
-//                                    Color.Transparent
-//                                )
-//                            )
-//                        )
                         .padding(16.dp)
                 ) {
                     Row(
@@ -155,7 +151,7 @@ fun ModernAppSelectionScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "Select Apps",
+                                text = "Manage Apps",
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 20.sp
@@ -163,38 +159,14 @@ fun ModernAppSelectionScreen(
                                 color = Color.White
                             )
                             Text(
-                                text = "${selectedApps.size} of ${availableApps.size} selected",
+                                text = "${appsWithRules.size} apps with rules",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.8f)
                             )
                         }
 
-                        AnimatedVisibility(
-                            visible = selectedApps.isNotEmpty(),
-                            enter = fadeIn() + scaleIn(),
-                            exit = fadeOut() + scaleOut()
-                        ) {
-                            Surface(
-                                onClick = { selectedApps = emptySet() },
-                                modifier = Modifier.size(48.dp),
-                                shape = RoundedCornerShape(24.dp),
-                                color = Color(0xFFDC3545),
-                                shadowElevation = 8.dp,
-                                border = BorderStroke(2.dp, Color.White.copy(alpha = 0.6f))
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ClearAll,
-                                        contentDescription = "Clear Selection",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                        }
+                        // Placeholder for symmetry
+                        Spacer(modifier = Modifier.size(48.dp))
                     }
                 }
             }
@@ -262,35 +234,6 @@ fun ModernAppSelectionScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Done Button
-                Button(
-                    onClick = { onAppsSelected(selectedApps) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6C63FF)
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 8.dp
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "Done",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Apps List
@@ -298,25 +241,40 @@ fun ModernAppSelectionScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    // Blocked Apps Section
-                    if (selectedAppsList.isNotEmpty()) {
+                    // Apps with Rules Section
+                    if (appsWithRules.isNotEmpty()) {
                         item {
                             ModernSectionHeader(
-                                title = "Blocked Apps",
-                                count = selectedAppsList.size,
+                                title = "Apps with Rules",
+                                count = appsWithRules.size,
                                 icon = Icons.Outlined.Block,
-                                color = Color(0xFFFF6B6B)
+                                color = Color(0xFF6C63FF)
                             )
                         }
-                        items(selectedAppsList) { app ->
-                            ModernAppItem(
+                        items(appsWithRules) { app ->
+                            val rules = rulesByPackage[app.packageName] ?: emptyList()
+                            ModernAppItemWithRules(
                                 appInfo = app,
-                                isSelected = true,
-                                onSelectionChange = { isSelected ->
-                                    selectedApps = if (isSelected) {
-                                        selectedApps + app.packageName
-                                    } else {
-                                        selectedApps - app.packageName
+                                rules = rules,
+                                onAddRule = {
+                                    navController.navigate(
+                                        Screen.RuleEditor.createRoute(
+                                        //    packageName = app.packageName,
+                                          //  appName = app.appName
+                                        )
+                                    )
+                                },
+                                onViewRules = {
+                                    // Navigate to first rule for editing
+                                    val firstRule = rules.firstOrNull()
+                                    if (firstRule != null) {
+                                        navController.navigate(
+                                            Screen.RuleEditor.createRoute(
+                                            //    packageName = app.packageName,
+                                            //    appName = app.appName,
+                                                ruleId = firstRule.id
+                                            )
+                                        )
                                     }
                                 }
                             )
@@ -327,32 +285,34 @@ fun ModernAppSelectionScreen(
                     }
 
                     // Installed Apps Section
-                    if (unselectedAppsList.isNotEmpty()) {
+                    if (appsWithoutRules.isNotEmpty()) {
                         item {
                             ModernSectionHeader(
-                                title = "Installed Apps",
-                                count = unselectedAppsList.size,
+                                title = "All Apps",
+                                count = appsWithoutRules.size,
                                 icon = Icons.Outlined.Apps,
                                 color = Color(0xFF4ECDC4)
                             )
                         }
-                        items(unselectedAppsList) { app ->
-                            ModernAppItem(
+                        items(appsWithoutRules) { app ->
+                            ModernAppItemWithRules(
                                 appInfo = app,
-                                isSelected = false,
-                                onSelectionChange = { isSelected ->
-                                    selectedApps = if (isSelected) {
-                                        selectedApps + app.packageName
-                                    } else {
-                                        selectedApps - app.packageName
-                                    }
-                                }
+                                rules = emptyList(),
+                                onAddRule = {
+                                    navController.navigate(
+                                        Screen.RuleEditor.createRoute(
+                                            //    packageName = app.packageName,
+                                            //    appName = app.appName,
+                                        )
+                                    )
+                                },
+                                onViewRules = {}
                             )
                         }
                     }
 
                     // Empty State
-                    if (selectedAppsList.isEmpty() && unselectedAppsList.isEmpty()) {
+                    if (appsWithRules.isEmpty() && appsWithoutRules.isEmpty()) {
                         item {
                             ModernEmptyState(
                                 searchQuery = searchQuery,
@@ -417,38 +377,26 @@ fun ModernSectionHeader(
 }
 
 @Composable
-fun ModernAppItem(
+fun ModernAppItemWithRules(
     appInfo: AppInfo,
-    isSelected: Boolean,
-    onSelectionChange: (Boolean) -> Unit
+    rules: List<BlockingRule>,
+    onAddRule: () -> Unit,
+    onViewRules: () -> Unit
 ) {
-    val animatedScale by animateFloatAsState(
-        targetValue = if (isSelected) 1.02f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "scale"
-    )
-
+    val hasRules = rules.isNotEmpty()
+    val activeRules = rules.count { it.enabled }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
-            }
-            .clickable { onSelectionChange(!isSelected) },
+            .clickable { if (hasRules) onViewRules() else onAddRule() },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
+            containerColor = if (hasRules)
                 Color.White.copy(alpha = 0.25f)
             else
                 Color.White.copy(alpha = 0.1f)
         )
-//        elevation = CardDefaults.cardElevation(
-//            defaultElevation = if (isSelected) 8.dp else 4.dp
-//        )
     ) {
         Row(
             modifier = Modifier
@@ -460,10 +408,8 @@ fun ModernAppItem(
             Box(
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(55.dp))
-                    .background(
-                        Color.White.copy(alpha = 0.2f)
-                    )
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.2f))
             ) {
                 if (appInfo.icon != null) {
                     AsyncImage(
@@ -471,7 +417,7 @@ fun ModernAppItem(
                         contentDescription = "${appInfo.appName} icon",
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(55.dp)),
+                            .clip(RoundedCornerShape(16.dp)),
                         contentScale = ContentScale.Fit
                     )
                 } else {
@@ -499,50 +445,65 @@ fun ModernAppItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = appInfo.packageName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                
+                if (hasRules) {
+                    Text(
+                        text = "$activeRules active ${if (activeRules == 1) "rule" else "rules"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF6C63FF),
+                        maxLines = 1
+                    )
+                } else {
+                    Text(
+                        text = "No rules",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Modern Selection Indicator
-            AnimatedContent(
-                targetState = isSelected,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(300)) with
-                            fadeOut(animationSpec = tween(300))
-                },
-                label = "selection"
-            ) { selected ->
-                if (selected) {
-                    Surface(
-                        modifier = Modifier.size(36.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color(0xFF6C63FF)
+            // Action Button
+            if (hasRules) {
+                // Rule count badge
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = CircleShape,
+                    color = Color(0xFF6C63FF)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = Color.White,
-                            modifier = Modifier.padding(6.dp)
+                        Text(
+                            text = rules.size.toString(),
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Color.White
                         )
                     }
-                } else {
+                }
+            } else {
+                // Add Rule button
+                IconButton(
+                    onClick = onAddRule,
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Surface(
-                        modifier = Modifier.size(36.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.Transparent,
-                        border = BorderStroke(
-                            2.dp,
-                            Color.White.copy(alpha = 0.4f)
-                        )
+                        modifier = Modifier.fillMaxSize(),
+                        shape = CircleShape,
+                        color = Color(0xFF6C63FF).copy(alpha = 0.3f),
+                        border = BorderStroke(2.dp, Color(0xFF6C63FF))
                     ) {
-                        // Empty circle for unselected state
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Rule",
+                            tint = Color(0xFF6C63FF),
+                            modifier = Modifier.padding(8.dp)
+                        )
                     }
                 }
             }
@@ -579,7 +540,7 @@ fun ModernEmptyState(
                 text = when {
                     searchQuery.isNotEmpty() -> "No apps found"
                     !hasApps -> "No apps available"
-                    else -> "Start selecting apps"
+                    else -> "Start adding rules"
                 },
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold
@@ -591,7 +552,7 @@ fun ModernEmptyState(
                 text = when {
                     searchQuery.isNotEmpty() -> "Try a different search term"
                     !hasApps -> "No apps found on this device"
-                    else -> "Choose apps to block during focus sessions"
+                    else -> "Tap any app to create a blocking rule"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.6f),

@@ -441,6 +441,31 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
                         errorAccent = errorAccent
                     )
                 }
+                item{
+                    // Option A: Simple Button
+Button(
+    onClick = { navController.navigate(Screen.ManageRules.route) },
+    modifier = Modifier
+        .fillMaxWidth()
+        .height(56.dp),
+    shape = RoundedCornerShape(16.dp),
+    colors = ButtonDefaults.buttonColors(
+        containerColor = Color(0xFF6C63FF)
+    )
+) {
+    Icon(
+        imageVector = Icons.Outlined.Rule,
+        contentDescription = null,
+        modifier = Modifier.size(24.dp)
+    )
+    Spacer(modifier = Modifier.width(12.dp))
+    Text(
+        text = "Manage Rules",
+        fontSize = 16.sp,
+        fontWeight = FontWeight.SemiBold
+    )
+}
+                }
             }
 
             if (showTimePicker) {

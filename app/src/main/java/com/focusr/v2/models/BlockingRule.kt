@@ -3,12 +3,22 @@ package com.focusr.v2.models
 import java.util.*
 
 /**
- * Represents a blocking rule for a specific app.
- * Each app can have multiple rules with different types and schedules.
+ * Represents a blocking rule that can apply to one or multiple apps.
+ * Supports alarm-style rule creation with precedence handling.
  */
 data class BlockingRule(
     val id: String = UUID.randomUUID().toString(),
-    val packageName: String,
+    
+    // NEW: Rule name for alarm-style UI
+    val name: String = "",
+    
+    // NEW: Multiple apps support
+    val packageNames: List<String> = emptyList(),
+    
+    // OLD: Single app (kept for backward compatibility)
+    @Deprecated("Use packageNames instead")
+    val packageName: String = "",
+    
     val ruleType: RuleType,
     val enabled: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
@@ -22,13 +32,48 @@ data class BlockingRule(
     val daysOfWeek: Set<DayOfWeek> = DayOfWeek.values().toSet()  // Default: all days
 ) {
     /**
+     * Gets the actual package names, handling backward compatibility
+     */
+    fun getApps(): List<String> {
+        return when {
+            packageNames.isNotEmpty() -> packageNames
+            packageName.isNotEmpty() -> listOf(packageName)
+            else -> emptyList()
+        }
+    }
+    
+    /**
+     * Gets the display name for the rule
+     */
+    fun getDisplayName(): String {
+        return name.ifEmpty {
+            val apps = getApps()
+            when {
+                apps.isEmpty() -> "Unnamed Rule"
+                apps.size == 1 -> "Rule for ${apps.first()}"
+                else -> "Rule for ${apps.size} apps"
+            }
+        }
+    }
+    
+    /**
+     * Gets the priority based on rule type (SIMPLE=1, SCHEDULED=2)
+     */
+    fun calculatePriority(): Int = when (ruleType) {
+        RuleType.SIMPLE -> 1
+        RuleType.SCHEDULED -> 2
+    }
+    
+    /**
      * Validates that the rule has the required fields for its type
      */
     fun isValid(): Boolean {
-        return when (ruleType) {
+        val hasApps = getApps().isNotEmpty()
+        val hasValidTimes = when (ruleType) {
             RuleType.SIMPLE -> blockUntilTime != null
             RuleType.SCHEDULED -> fromTime != null && toTime != null
         }
+        return hasApps && hasValidTimes
     }
     
     /**
@@ -49,6 +94,18 @@ data class BlockingRule(
         }
     }
     
+    /**
+     * Returns app count description
+     */
+    fun getAppCountDescription(): String {
+        val count = getApps().size
+        return when (count) {
+            0 -> "No apps"
+            1 -> "1 app"
+            else -> "$count apps"
+        }
+    }
+    
     private fun formatTime(hour: Int, minute: Int): String {
         val period = if (hour >= 12) "PM" else "AM"
         val displayHour = when {
@@ -64,8 +121,8 @@ data class BlockingRule(
  * Types of blocking rules
  */
 enum class RuleType {
-    SIMPLE,     // Block until specific time (same day)
-    SCHEDULED   // Recurring schedule with days of week
+    SIMPLE,     // Block until specific time (same day) - Priority 1
+    SCHEDULED   // Recurring schedule with days of week - Priority 2
 }
 
 /**

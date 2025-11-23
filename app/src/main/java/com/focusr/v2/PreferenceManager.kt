@@ -256,8 +256,15 @@ class PreferencesManager(private val context: Context) {
         rules.forEach { rule ->
             val jsonObject = JSONObject().apply {
                 put("id", rule.id)
-                put("packageName", rule.packageName)
-                put("ruleType", rule.ruleType.name)
+                // NEW: Multi-app support
+put("name", rule.name)
+val appsArray = JSONArray()
+rule.getApps().forEach { pkg -> appsArray.put(pkg) }
+put("packageNames", appsArray)
+// Keep old field for backward compatibility
+@Suppress("DEPRECATION")
+put("packageName", rule.packageName)
+put("ruleType", rule.ruleType.name)
                 put("enabled", rule.enabled)
                 put("createdAt", rule.createdAt)
                 
@@ -318,10 +325,21 @@ class PreferencesManager(private val context: Context) {
                     days
                 } else DayOfWeek.values().toSet()
                 
-                val rule = BlockingRule(
-                    id = jsonObject.getString("id"),
-                    packageName = jsonObject.getString("packageName"),
-                    ruleType = ruleType,
+                // NEW: Load multi-app fields with backward compatibility
+val name = if (jsonObject.has("name")) {
+    jsonObject.getString("name")
+} else ""
+val packageNames = if (jsonObject.has("packageNames")) {
+    val appsArray = jsonObject.getJSONArray("packageNames")
+    (0 until appsArray.length()).map { appsArray.getString(it) }
+} else if (jsonObject.has("packageName")) {
+    listOf(jsonObject.getString("packageName"))
+} else emptyList()
+val rule = BlockingRule(
+    id = jsonObject.getString("id"),
+    name = name,
+    packageNames = packageNames,
+    ruleType = ruleType,
                     enabled = jsonObject.getBoolean("enabled"),
                     createdAt = jsonObject.getLong("createdAt"),
                     blockUntilTime = blockUntilTime,
