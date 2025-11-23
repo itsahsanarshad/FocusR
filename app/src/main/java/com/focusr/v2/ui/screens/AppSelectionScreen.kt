@@ -41,16 +41,29 @@ fun ModernAppSelectionScreen(
     onBackClick: () -> Unit,
     navController: NavController,
     ruleViewModel: RuleViewModel,
-    availableApps: List<AppInfo>
+    availableApps: List<AppInfo>,
+    selectionMode: Boolean = false,  // NEW
+    ruleId: String? = null,  // NEW
+    onAppsSelected: ((Set<String>) -> Unit)? = null  // NEW callback
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedApps by remember { mutableStateOf(setOf<String>()) }  // NEW
+
+    // Load existing selections if editing
+    LaunchedEffect(ruleId) {
+        if (ruleId != null && selectionMode) {
+            ruleViewModel.getRuleById(ruleId)?.let { rule ->
+                selectedApps = rule.getApps().toSet()
+            }
+        }
+    }
     
     // Collect rules state
     val rulesState by ruleViewModel.uiState.collectAsState()
     val rulesByPackage = remember(rulesState.allRules) {
         rulesState.allRules.groupBy { it.packageName }
     }
-
+ 
     // Filter apps
     val filteredApps = remember(availableApps, searchQuery) {
         if (searchQuery.isEmpty()) {
@@ -63,13 +76,18 @@ fun ModernAppSelectionScreen(
         }
     }
 
-    // Separate apps with rules from apps without rules
-    val (appsWithRules, appsWithoutRules) = remember(filteredApps, rulesByPackage) {
-        val withRules = filteredApps.filter { rulesByPackage[it.packageName]?.isNotEmpty() == true }
-            .sortedBy { it.appName.lowercase() }
-        val withoutRules = filteredApps.filter { rulesByPackage[it.packageName]?.isEmpty() != false }
-            .sortedBy { it.appName.lowercase() }
-        Pair(withRules, withoutRules)
+    // Separate apps with rules from apps without rules (only when not in selection mode)
+    val (appsWithRules, appsWithoutRules) = remember(filteredApps, rulesByPackage, selectionMode) {
+        if (selectionMode) {
+            // In selection mode, show all apps in one list
+            Pair(emptyList(), filteredApps.sortedBy { it.appName.lowercase() })
+        } else {
+            val withRules = filteredApps.filter { rulesByPackage[it.packageName]?.isNotEmpty() == true }
+                .sortedBy { it.appName.lowercase() }
+            val withoutRules = filteredApps.filter { rulesByPackage[it.packageName]?.isEmpty() != false }
+                .sortedBy { it.appName.lowercase() }
+            Pair(withRules, withoutRules)
+        }
     }
 
     // Modern gradient background
@@ -151,22 +169,61 @@ fun ModernAppSelectionScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "Manage Apps",
+                                text = if (selectionMode) "Select Apps" else "Manage Apps",
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 20.sp
                                 ),
                                 color = Color.White
                             )
-                            Text(
-                                text = "${appsWithRules.size} apps with rules",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.8f)
-                            )
+                            
+                            // Show selection count or apps with rules count
+                            if (selectionMode && selectedApps.isNotEmpty()) {
+                                Text(
+                                    text = "${selectedApps.size} selected",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            } else if (!selectionMode) {
+                                Text(
+                                    text = "${appsWithRules.size} apps with rules",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
                         }
 
-                        // Placeholder for symmetry
-                        Spacer(modifier = Modifier.size(48.dp))
+                        // Done button for selection mode or placeholder for symmetry
+                        if (selectionMode) {
+                            Surface(
+                                onClick = {
+                                    // Save selections and go back
+                                    onAppsSelected?.invoke(selectedApps)
+                                    navController.previousBackStackEntry
+                                        ?.savedStateHandle
+                                        ?.set("selected_apps", selectedApps.toList())
+                                    onBackClick()
+                                },
+                                modifier = Modifier.size(48.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                color = Color(0xFF6C63FF),
+                                shadowElevation = 8.dp
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Done",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.size(48.dp))
+                        }
                     }
                 }
             }
@@ -241,8 +298,8 @@ fun ModernAppSelectionScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    // Apps with Rules Section
-                    if (appsWithRules.isNotEmpty()) {
+                    // Apps with Rules Section (only in normal mode)
+                    if (appsWithRules.isNotEmpty() && !selectionMode) {
                         item {
                             ModernSectionHeader(
                                 title = "Apps with Rules",
@@ -258,10 +315,7 @@ fun ModernAppSelectionScreen(
                                 rules = rules,
                                 onAddRule = {
                                     navController.navigate(
-                                        Screen.RuleEditor.createRoute(
-                                        //    packageName = app.packageName,
-                                          //  appName = app.appName
-                                        )
+                                        Screen.RuleEditor.createRoute()
                                     )
                                 },
                                 onViewRules = {
@@ -270,8 +324,6 @@ fun ModernAppSelectionScreen(
                                     if (firstRule != null) {
                                         navController.navigate(
                                             Screen.RuleEditor.createRoute(
-                                            //    packageName = app.packageName,
-                                            //    appName = app.appName,
                                                 ruleId = firstRule.id
                                             )
                                         )
@@ -284,30 +336,43 @@ fun ModernAppSelectionScreen(
                         }
                     }
 
-                    // Installed Apps Section
+                    // All Apps Section
                     if (appsWithoutRules.isNotEmpty()) {
                         item {
                             ModernSectionHeader(
-                                title = "All Apps",
+                                title = if (selectionMode) "Select Apps" else "All Apps",
                                 count = appsWithoutRules.size,
                                 icon = Icons.Outlined.Apps,
                                 color = Color(0xFF4ECDC4)
                             )
                         }
                         items(appsWithoutRules) { app ->
-                            ModernAppItemWithRules(
-                                appInfo = app,
-                                rules = emptyList(),
-                                onAddRule = {
-                                    navController.navigate(
-                                        Screen.RuleEditor.createRoute(
-                                            //    packageName = app.packageName,
-                                            //    appName = app.appName,
+                            if (selectionMode) {
+                                // Selection mode: show selectable items
+                                ModernAppItemSelectable(
+                                    appInfo = app,
+                                    isSelected = selectedApps.contains(app.packageName),
+                                    onClick = {
+                                        selectedApps = if (selectedApps.contains(app.packageName)) {
+                                            selectedApps - app.packageName
+                                        } else {
+                                            selectedApps + app.packageName
+                                        }
+                                    }
+                                )
+                            } else {
+                                // Normal mode: show with rules
+                                ModernAppItemWithRules(
+                                    appInfo = app,
+                                    rules = emptyList(),
+                                    onAddRule = {
+                                        navController.navigate(
+                                            Screen.RuleEditor.createRoute()
                                         )
-                                    )
-                                },
-                                onViewRules = {}
-                            )
+                                    },
+                                    onViewRules = {}
+                                )
+                            }
                         }
                     }
 
@@ -506,6 +571,99 @@ fun ModernAppItemWithRules(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+// NEW: Selectable app item for selection mode
+@Composable
+fun ModernAppItemSelectable(
+    appInfo: AppInfo,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                Color(0xFF6C63FF).copy(alpha = 0.3f)
+            else
+                Color.White.copy(alpha = 0.1f)
+        ),
+        border = if (isSelected)
+            BorderStroke(2.dp, Color(0xFF6C63FF))
+        else
+            null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // App Icon with Glassmorphism
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.2f))
+            ) {
+                if (appInfo.icon != null) {
+                    AsyncImage(
+                        model = appInfo.icon,
+                        contentDescription = "${appInfo.appName} icon",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Android,
+                        contentDescription = "App icon",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(12.dp),
+                        tint = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // App Info
+            Text(
+                text = appInfo.appName,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Selection Indicator
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = Color(0xFF6C63FF),
+                    modifier = Modifier.size(28.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = "Not selected",
+                    tint = Color.White.copy(alpha = 0.4f),
+                    modifier = Modifier.size(28.dp)
+                )
             }
         }
     }

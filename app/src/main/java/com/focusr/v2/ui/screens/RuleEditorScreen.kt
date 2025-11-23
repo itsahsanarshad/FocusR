@@ -13,12 +13,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner  // ADD THIS
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.focusr.v2.AppInfo
 import com.focusr.v2.models.BlockingRule
 import com.focusr.v2.models.DayOfWeek
 import com.focusr.v2.models.RuleType
+import com.focusr.v2.navigation.Screen  // ADD THIS
 import com.focusr.v2.ui.viewmodels.RuleViewModel
 import java.util.*
 
@@ -85,6 +87,18 @@ fun RuleEditorScreen(
             }
         }
     }
+
+    // At the top of RuleEditorScreen, after LaunchedEffect for loading rule
+// Observe selected apps from navigation
+val lifecycleOwner = LocalLifecycleOwner.current
+LaunchedEffect(Unit) {
+    navController.currentBackStackEntry
+        ?.savedStateHandle
+        ?.getLiveData<List<String>>("selected_apps")
+        ?.observe(lifecycleOwner) { apps ->
+            selectedApps = apps.toSet()
+        }
+}
     
     Scaffold(
         topBar = {
@@ -105,7 +119,7 @@ fun RuleEditorScreen(
             )
         }
     ) { padding ->
-        Column(
+        Column( 
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -127,7 +141,10 @@ fun RuleEditorScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { showAppPicker = true },
+                    .clickable {
+            // Navigate to app selection screen
+            navController.navigate(Screen.AppSelection.createRoute(ruleId = ruleId))
+        },
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(

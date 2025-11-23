@@ -101,5 +101,27 @@ composable(
         availableApps = allApps
     )
 }
+
+composable(
+    route = "app_selection?ruleId={ruleId}",  // Changed to optional query parameter
+    arguments = listOf(
+        navArgument("ruleId") {
+            type = NavType.StringType
+            nullable = true
+            defaultValue = null
+        }
+    )
+) { backStackEntry ->
+    val ruleId = backStackEntry.arguments?.getString("ruleId")
+    
+    ModernAppSelectionScreen(
+        onBackClick = { navController.popBackStack() },
+        navController = navController,
+        ruleViewModel = ruleViewModel,
+        availableApps = allApps,
+        selectionMode = true,  // NEW parameter
+        ruleId = ruleId  // NEW parameter
+    )
+}
     }
 }
