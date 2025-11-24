@@ -44,14 +44,17 @@ fun ModernAppSelectionScreen(
     availableApps: List<AppInfo>,
     selectionMode: Boolean = false,  // NEW
     ruleId: String? = null,  // NEW
-    onAppsSelected: ((Set<String>) -> Unit)? = null  // NEW callback
+    onAppsSelected: ((Set<String>) -> Unit)? = null,  // NEW callback
+    initialSelectedApps: Set<String> = emptySet()  // ADD THIS
+
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var selectedApps by remember { mutableStateOf(setOf<String>()) }  // NEW
+    var selectedApps by remember { mutableStateOf(initialSelectedApps) }  // NEW
 
     // Load existing selections if editing
     LaunchedEffect(ruleId) {
-        if (ruleId != null && selectionMode) {
+        if (ruleId != null && selectionMode && initialSelectedApps.isEmpty()) {
+            // Only load from DB if no initial selection provided
             ruleViewModel.getRuleById(ruleId)?.let { rule ->
                 selectedApps = rule.getApps().toSet()
             }
@@ -76,12 +79,17 @@ fun ModernAppSelectionScreen(
         }
     }
 
-    // Separate apps with rules from apps without rules (only when not in selection mode)
-    val (appsWithRules, appsWithoutRules) = remember(filteredApps, rulesByPackage, selectionMode) {
+    // Separate apps based on mode
+    val (appsWithRules, appsWithoutRules) = remember(filteredApps, rulesByPackage, selectionMode, selectedApps) {
         if (selectionMode) {
-            // In selection mode, show all apps in one list
-            Pair(emptyList(), filteredApps.sortedBy { it.appName.lowercase() })
+            // In selection mode, separate selected from unselected
+            val selected = filteredApps.filter { selectedApps.contains(it.packageName) }
+                .sortedBy { it.appName.lowercase() }
+            val unselected = filteredApps.filter { !selectedApps.contains(it.packageName) }
+                .sortedBy { it.appName.lowercase() }
+            Pair(selected, unselected)
         } else {
+            // In normal mode, separate apps with rules from apps without
             val withRules = filteredApps.filter { rulesByPackage[it.packageName]?.isNotEmpty() == true }
                 .sortedBy { it.appName.lowercase() }
             val withoutRules = filteredApps.filter { rulesByPackage[it.packageName]?.isEmpty() != false }
@@ -197,12 +205,16 @@ fun ModernAppSelectionScreen(
                         if (selectionMode) {
                             Surface(
                                 onClick = {
-                                    // Save selections and go back
-                                    onAppsSelected?.invoke(selectedApps)
-                                    navController.previousBackStackEntry
-                                        ?.savedStateHandle
-                                        ?.set("selected_apps", selectedApps.toList())
-                                    onBackClick()
+                                    if (onAppsSelected != null) {
+                                        // Dialog mode - call callback
+                                        onAppsSelected(selectedApps)
+                                    } else {
+                                        // Navigation mode - use savedStateHandle
+                                        navController.previousBackStackEntry
+                                            ?.savedStateHandle
+                                            ?.set("selected_apps", selectedApps.toList())
+                                        navController.popBackStack()
+                                    }
                                 },
                                 modifier = Modifier.size(48.dp),
                                 shape = RoundedCornerShape(24.dp),
@@ -298,49 +310,56 @@ fun ModernAppSelectionScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    // Apps with Rules Section (only in normal mode)
-                    if (appsWithRules.isNotEmpty() && !selectionMode) {
+                    // Selected Apps Section (in selection mode) OR Apps with Rules (in normal mode)
+                    if (appsWithRules.isNotEmpty()) {
                         item {
                             ModernSectionHeader(
-                                title = "Apps with Rules",
+                                title = if (selectionMode) "Selected Apps" else "Apps with Rules",
                                 count = appsWithRules.size,
-                                icon = Icons.Outlined.Block,
+                                icon = if (selectionMode) Icons.Default.Check else Icons.Outlined.Block,
                                 color = Color(0xFF6C63FF)
                             )
                         }
                         items(appsWithRules) { app ->
-                            val rules = rulesByPackage[app.packageName] ?: emptyList()
-                            ModernAppItemWithRules(
-                                appInfo = app,
-                                rules = rules,
-                                onAddRule = {
-                                    navController.navigate(
-                                        Screen.RuleEditor.createRoute()
-                                    )
-                                },
-                                onViewRules = {
-                                    // Navigate to first rule for editing
-                                    val firstRule = rules.firstOrNull()
-                                    if (firstRule != null) {
-                                        navController.navigate(
-                                            Screen.RuleEditor.createRoute(
-                                                ruleId = firstRule.id
-                                            )
-                                        )
+                            if (selectionMode) {
+                                // Selection mode: show selectable items
+                                ModernAppItemSelectable(
+                                    appInfo = app,
+                                    isSelected = true,  // Always true in this section
+                                    onClick = {
+                                        selectedApps = selectedApps - app.packageName
                                     }
-                                }
-                            )
+                                )
+                            } else {
+                                // Normal mode: show with rules
+                                val rules = rulesByPackage[app.packageName] ?: emptyList()
+                                ModernAppItemWithRules(
+                                    appInfo = app,
+                                    rules = rules,
+                                    onAddRule = {
+                                        navController.navigate(Screen.RuleEditor.createRoute())
+                                    },
+                                    onViewRules = {
+                                        val firstRule = rules.firstOrNull()
+                                        if (firstRule != null) {
+                                            navController.navigate(
+                                                Screen.RuleEditor.createRoute(ruleId = firstRule.id)
+                                            )
+                                        }
+                                    }
+                                )
+                            }
                         }
                         item {
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
 
-                    // All Apps Section
+// All Apps Section (unselected in selection mode, or apps without rules in normal mode)
                     if (appsWithoutRules.isNotEmpty()) {
                         item {
                             ModernSectionHeader(
-                                title = if (selectionMode) "Select Apps" else "All Apps",
+                                title = if (selectionMode) "All Apps" else "All Apps",
                                 count = appsWithoutRules.size,
                                 icon = Icons.Outlined.Apps,
                                 color = Color(0xFF4ECDC4)
@@ -351,13 +370,9 @@ fun ModernAppSelectionScreen(
                                 // Selection mode: show selectable items
                                 ModernAppItemSelectable(
                                     appInfo = app,
-                                    isSelected = selectedApps.contains(app.packageName),
+                                    isSelected = false,  // Always false in this section
                                     onClick = {
-                                        selectedApps = if (selectedApps.contains(app.packageName)) {
-                                            selectedApps - app.packageName
-                                        } else {
-                                            selectedApps + app.packageName
-                                        }
+                                        selectedApps = selectedApps + app.packageName
                                     }
                                 )
                             } else {
@@ -366,9 +381,7 @@ fun ModernAppSelectionScreen(
                                     appInfo = app,
                                     rules = emptyList(),
                                     onAddRule = {
-                                        navController.navigate(
-                                            Screen.RuleEditor.createRoute()
-                                        )
+                                        navController.navigate(Screen.RuleEditor.createRoute())
                                     },
                                     onViewRules = {}
                                 )

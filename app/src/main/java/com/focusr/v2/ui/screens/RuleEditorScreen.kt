@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner  // ADD THIS
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.focusr.v2.AppInfo
 import com.focusr.v2.models.BlockingRule
@@ -51,6 +53,7 @@ fun RuleEditorScreen(
     
     var showDeleteDialog by remember { mutableStateOf(false) }
     var existingRule by remember { mutableStateOf<BlockingRule?>(null) }
+    var showAppPickerDialog by remember { mutableStateOf(false) }
     
     // Load existing rule if editing
     LaunchedEffect(ruleId) {
@@ -143,7 +146,7 @@ LaunchedEffect(Unit) {
                     .fillMaxWidth()
                     .clickable {
             // Navigate to app selection screen
-            navController.navigate(Screen.AppSelection.createRoute(ruleId = ruleId))
+                        showAppPickerDialog = true  // Show dialog instead of navigating
         },
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -336,8 +339,35 @@ LaunchedEffect(Unit) {
                 )
             }
         }
+
     }
-    
+
+    // App Picker Dialog
+    if (showAppPickerDialog) {
+        Dialog(
+            onDismissRequest = { showAppPickerDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                ModernAppSelectionScreen(
+                    onBackClick = { showAppPickerDialog = false },
+                    navController = navController,
+                    ruleViewModel = ruleViewModel,
+                    availableApps = availableApps,
+                    selectionMode = true,
+                    ruleId = ruleId,
+                    initialSelectedApps = selectedApps,  // ADD THIS - pass current selection
+                    onAppsSelected = { apps ->
+                        selectedApps = apps
+                        showAppPickerDialog = false
+                    }
+                )
+            }
+        }
+    }
     // App Picker Dialog
     if (showAppPicker) {
         AppPickerDialog(

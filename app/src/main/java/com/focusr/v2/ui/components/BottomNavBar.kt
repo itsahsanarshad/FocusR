@@ -6,8 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Rule
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.outlined.Rule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,9 +39,9 @@ fun BottomNavBar(navController: NavHostController) {
             icon = Icons.Default.Home
         ),
         BottomNavItem(
-            name = "Apps",
-            route = Screen.AppSelection.route,
-            icon = Icons.Default.Apps
+            name = "Rules",
+            route = Screen.ManageRules.route,
+            icon = Icons.AutoMirrored.Outlined.Rule
         )
     )
 

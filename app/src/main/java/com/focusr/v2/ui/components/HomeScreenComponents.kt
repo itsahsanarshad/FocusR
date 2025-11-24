@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.focusr.v2.models.BlockingRule
 import com.focusr.v2.models.RuleType
+import kotlinx.coroutines.delay
 
 /**
  * Status card showing rule statistics
@@ -34,6 +35,18 @@ fun RuleStatusCard(
     pauseUntil: Long?,
     modifier: Modifier = Modifier
 ) {
+    // ADD THIS: Force recomposition every minute to update countdown
+    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    
+    LaunchedEffect(isPaused, pauseUntil) {
+        if (isPaused && pauseUntil != null && pauseUntil != Long.MAX_VALUE) {
+            while (true) {
+                delay(60000) // Update every minute
+                currentTime = System.currentTimeMillis()
+            }
+        }
+    }
+    
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -97,18 +110,28 @@ fun RuleStatusCard(
             }
             
             // Pause info
-            if (isPaused && pauseUntil != null && pauseUntil != Long.MAX_VALUE) {
-                Spacer(modifier = Modifier.height(12.dp))
-                val remaining = (pauseUntil - System.currentTimeMillis()) / 1000 / 60
-                Text(
-                    "Resumes in ${remaining}m",
-                    fontSize = 14.sp,
-                    color = Color(0xFFFFB84D),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+if (isPaused && pauseUntil != null && pauseUntil != Long.MAX_VALUE) {
+    Spacer(modifier = Modifier.height(12.dp))
+    val remaining = (pauseUntil - currentTime) / 1000 / 60
+    val hours = remaining / 60
+    val mins = remaining % 60
+    
+    val timeText = when {
+        hours > 0 && mins > 0 -> "Resumes in ${hours}h ${mins}m"
+        hours > 0 -> "Resumes in ${hours}h"
+        mins > 0 -> "Resumes in ${mins}m"
+        else -> "Resuming..."
+    }
+    
+    Text(
+        timeText,
+        fontSize = 14.sp,
+        color = Color(0xFFFFB84D),
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+        fontWeight = FontWeight.Medium
+    )
+}
         }
     }
 }
