@@ -6,22 +6,6 @@ import java.util.*
 
 class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
 
-    // Flags for tracking state across different scenarios
-    private var hasDayChanged = false
-    private var hasBlockingStarted = false
-   
-
-   
-
-
-    /**
-     * Resets all internal flags (call this when service stops)
-     */
-    fun resetFlags() {
-        hasDayChanged = false
-        hasBlockingStarted = false
-    }
-
     // ========== NEW RULE-BASED SYSTEM ==========
     
     /**
@@ -117,11 +101,11 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
     /**
      * Get all apps that should currently be blocked
      */
-    suspend fun getCurrentlyBlockedApps(): Set<String> {
-        val allRules = preferencesManager.blockingRules.first()
-        return allRules
-            .filter { it.enabled && isRuleActive(it) }
-            .map { it.packageName }
-            .toSet()
-    }
+suspend fun getCurrentlyBlockedApps(): Set<String> {
+    val allRules = preferencesManager.blockingRules.first()
+    return allRules
+        .filter { it.enabled && isRuleActive(it) }
+        .flatMap { it.getApps() }  // Use getApps() instead!
+        .toSet()
+}
 }

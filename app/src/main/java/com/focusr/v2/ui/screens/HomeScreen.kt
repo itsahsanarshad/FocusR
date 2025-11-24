@@ -2,11 +2,8 @@
 
 package com.focusr.v2.ui.screens
 
-import android.app.ActivityManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import androidx.activity.ComponentActivity
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -39,8 +36,6 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -73,8 +68,6 @@ import com.focusr.v2.PreferencesManager
 import com.focusr.v2.R
 import com.focusr.v2.ServiceScheduler
 import com.focusr.v2.navigation.Screen
-import com.focusr.v2.ui.components.ModernTimeButton
-import com.focusr.v2.ui.components.ModernTimePickerDialog
 import com.focusr.v2.ui.components.ModernTopBar
 enum class PermissionStep {
     USAGE_STATS,
@@ -96,28 +89,10 @@ fun HomeScreen(activity: MainActivity, navController: NavController) {
     // ADD THIS STATE
     var isEnabled by remember { mutableStateOf(false) }
 
-    var showTimePicker by remember { mutableStateOf(false) }
-    var isFromPicker by remember { mutableStateOf(true) }
-    var showAppSelection by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
     var currentPermissionStep by remember { mutableStateOf(PermissionStep.COMPLETED) }
     var isWaitingForPermission by remember { mutableStateOf(false) }
 
-    val fromTimeState = rememberTimePickerState(
-        is24Hour = false
-    )
-    val toTimeState = rememberTimePickerState(
-        is24Hour = false
-    )
-
-    val pulseAnimation by rememberInfiniteTransition().animateFloat(
-        initialValue = 1f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
 
     // Glassmorphism Design Tokens
     val primaryGradient = Brush.radialGradient(
@@ -129,7 +104,15 @@ fun HomeScreen(activity: MainActivity, navController: NavController) {
     val selectedGlassCard = Color.White.copy(alpha = 0.25f)
     val primaryAccent = Color(0xFF6C63FF)
     val secondaryAccent = Color(0xFF4ECDC4)
-    val errorAccent = Color(0xFFFF6B6B)
+val errorAccent = Color(0xFFFF6B6B)
+val pulseAnimation by rememberInfiniteTransition().animateFloat(
+    initialValue = 1f,
+    targetValue = 1.05f,
+    animationSpec = infiniteRepeatable(
+        animation = tween(2000, easing = FastOutSlowInEasing),
+        repeatMode = RepeatMode.Reverse
+    )
+)
 
     fun checkPermissionFlow() {
         if (!isWaitingForPermission) return
@@ -216,7 +199,7 @@ fun HomeScreen(activity: MainActivity, navController: NavController) {
                 item {
                     ModernStatusCard(
                         isEnabled = isEnabled, // ADD THIS
-                        pulseScale = 1f,
+                        pulseScale = if (isEnabled) pulseAnimation else 1f,
                         onToggle = { enabled ->
                             if (enabled) {
                                 // Check all permissions
@@ -332,7 +315,7 @@ fun HomeScreen(activity: MainActivity, navController: NavController) {
 @Composable
 fun ModernStatusCard(
     isEnabled: Boolean,
-    pulseScale: Float,
+    pulseScale: Float , // Use the animation value
     onToggle: (Boolean) -> Unit,
     glassCard: Color,
     selectedGlassCard: Color,
@@ -475,7 +458,7 @@ fun ModernPermissionDialog(
     onDismiss: () -> Unit,
     onGrantPermission: () -> Unit
 ) {
-    val manufacturer = android.os.Build.MANUFACTURER.lowercase(Locale.getDefault())
+    
 
     val (title, description, buttonText, icon) = when (step) {
         PermissionStep.USAGE_STATS -> Quadruple(

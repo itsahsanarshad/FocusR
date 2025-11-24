@@ -200,8 +200,6 @@ Log.d("AppMonitoringService", "Enabled rules: ${enabledRules.size}, Active rules
 
     override fun onDestroy() {
         super.onDestroy()
-        // Reset timing flags when service stops
-        blockingTimeManager.resetFlags()
 
         stopNotificationUpdates()
         monitoringRunnable?.let { handler.removeCallbacks(it) }
