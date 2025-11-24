@@ -33,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.focusr.v2.R
-import com.focusr.v2.ui.screens.getCurrentTime
 import kotlinx.coroutines.delay
 
 //@Composable
@@ -84,14 +83,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun ModernTopBar(primaryAccent: Color) {
-    var timeString by remember { mutableStateOf(getCurrentTime()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            timeString = getCurrentTime()
-            delay(1000)
-        }
-    }
+   
 
     Box(
         modifier = Modifier
@@ -133,11 +125,7 @@ fun ModernTopBar(primaryAccent: Color) {
                         )
                     }
 
-                    Text(
-                        "Current Time $timeString",
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
+      
                     Spacer(Modifier.height(10.dp))
                 }
             },

@@ -279,28 +279,8 @@ class MainActivity : ComponentActivity() {
         // Clean up if needed
     }
 
-    // Function to handle blocking toggle from UI components
-    fun onBlockingToggled(enabled: Boolean) {
-        lifecycleScope.launch {
-            preferencesManager.setBlockingEnabled(enabled)
-            if (enabled) {
-                // Schedule service to start at appropriate time
-                serviceScheduler.scheduleService()
-                // Show user when blocking will start using unified logic
-                showBlockingScheduleMessage()
-            } else {
-                // Stop service and cancel scheduled starts
-                serviceScheduler.cancelScheduledService()
-                stopService(Intent(this@MainActivity, AppMonitoringService::class.java))
-                Toast.makeText(this@MainActivity, "Blocking disabled", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
-    private suspend fun showBlockingScheduleMessage() {
-        val message = blockingTimeManager.getBlockingScheduleMessage()
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    }
+
 }
 
 @Composable

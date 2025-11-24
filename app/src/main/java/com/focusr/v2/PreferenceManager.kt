@@ -18,105 +18,12 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class PreferencesManager(private val context: Context) {
 
     companion object {
-        // Old keys - kept for migration
-        private val ADVANCED_MODE_KEY = booleanPreferencesKey("advanced_mode")
-        private val FROM_HOUR_KEY = intPreferencesKey("from_hour")
-        private val FROM_MINUTE_KEY = intPreferencesKey("from_minute")
-        private val TO_HOUR_KEY = intPreferencesKey("to_hour")
-        private val TO_MINUTE_KEY = intPreferencesKey("to_minute")
-        private val BLOCKED_APPS_KEY = stringSetPreferencesKey("blocked_apps")
-        private val BLOCKING_ENABLED_KEY = booleanPreferencesKey("blocking_enabled")
-        private val BLOCKING_START_TIME_KEY = longPreferencesKey("blocking_start_time")
-        private val WAS_BLOCKING_ENABLED_BEFORE_REBOOT_KEY = booleanPreferencesKey("was_blocking_enabled_before_reboot")
         
         // New rule-based storage
         private val BLOCKING_RULES_KEY = stringPreferencesKey("blocking_rules_json")
         private val MIGRATION_COMPLETED_KEY = booleanPreferencesKey("migration_completed")
     }
 
-    // ========== OLD SYSTEM (kept for backward compatibility) ==========
-    
-    val advancedMode: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[ADVANCED_MODE_KEY] ?: false
-    }
-
-    val fromTime: Flow<Pair<Int, Int>> = context.dataStore.data.map { preferences ->
-        Pair(
-            preferences[FROM_HOUR_KEY] ?: 8,
-            preferences[FROM_MINUTE_KEY] ?: 0
-        )
-    }
-
-    val toTime: Flow<Pair<Int, Int>> = context.dataStore.data.map { preferences ->
-        Pair(
-            preferences[TO_HOUR_KEY] ?: 22,
-            preferences[TO_MINUTE_KEY] ?: 0
-        )
-    }
-
-    val blockedApps: Flow<Set<String>> = context.dataStore.data.map { preferences ->
-        preferences[BLOCKED_APPS_KEY] ?: emptySet()
-    }
-
-    val blockingEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[BLOCKING_ENABLED_KEY] ?: false
-    }
-
-    val blockingStartTime: Flow<Long?> = context.dataStore.data.map { preferences ->
-        preferences[BLOCKING_START_TIME_KEY]
-    }
-
-    val wasBlockingEnabledBeforeReboot: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[WAS_BLOCKING_ENABLED_BEFORE_REBOOT_KEY] ?: false
-    }
-
-    suspend fun setAdvancedMode(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[ADVANCED_MODE_KEY] = enabled
-        }
-    }
-
-    suspend fun setFromTime(hour: Int, minute: Int) {
-        context.dataStore.edit { preferences ->
-            preferences[FROM_HOUR_KEY] = hour
-            preferences[FROM_MINUTE_KEY] = minute
-        }
-    }
-
-    suspend fun setToTime(hour: Int, minute: Int) {
-        context.dataStore.edit { preferences ->
-            preferences[TO_HOUR_KEY] = hour
-            preferences[TO_MINUTE_KEY] = minute
-        }
-    }
-
-    suspend fun setBlockedApps(apps: Set<String>) {
-        context.dataStore.edit { preferences ->
-            preferences[BLOCKED_APPS_KEY] = apps
-        }
-    }
-
-    suspend fun setBlockingEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[BLOCKING_ENABLED_KEY] = enabled
-        }
-    }
-
-    suspend fun setBlockingStartTime(timestamp: Long?) {
-        context.dataStore.edit { preferences ->
-            if (timestamp != null) {
-                preferences[BLOCKING_START_TIME_KEY] = timestamp
-            } else {
-                preferences.remove(BLOCKING_START_TIME_KEY)
-            }
-        }
-    }
-
-    suspend fun setWasBlockingEnabledBeforeReboot(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[WAS_BLOCKING_ENABLED_BEFORE_REBOOT_KEY] = enabled
-        }
-    }
 
     // ========== NEW RULE-BASED SYSTEM ==========
     
@@ -195,59 +102,27 @@ class PreferencesManager(private val context: Context) {
         return blockingRules.first().filter { it.enabled }
     }
     
-    /**
-     * Migrate old blocked apps to new rule system
-     */
-    suspend fun migrateOldBlockedApps() {
-        // Check if migration already done
-        if (migrationCompleted.first()) {
-            Log.d("PreferencesManager", "Migration already completed, skipping")
-            return
-        }
-        
-        val oldBlockedApps = blockedApps.first()
-        if (oldBlockedApps.isEmpty()) {
-            // No old data to migrate
-            context.dataStore.edit { it[MIGRATION_COMPLETED_KEY] = true }
-            Log.d("PreferencesManager", "No old data to migrate")
-            return
-        }
-        
-        Log.d("PreferencesManager", "Starting migration of ${oldBlockedApps.size} apps")
-        
-        val advancedMode = advancedMode.first()
-        val fromTime = fromTime.first()
-        val toTime = toTime.first()
-        
-        oldBlockedApps.forEach { packageName ->
-            val rule = if (advancedMode) {
-                // Convert to SCHEDULED rule
-                BlockingRule(
-                    packageName = packageName,
-                    ruleType = RuleType.SCHEDULED,
-                    fromTime = fromTime,
-                    toTime = toTime,
-                    daysOfWeek = DayOfWeek.values().toSet()
-                )
-            } else {
-                // Convert to SIMPLE rule
-                BlockingRule(
-                    packageName = packageName,
-                    ruleType = RuleType.SIMPLE,
-                    blockUntilTime = toTime
-                )
-            }
-            addRule(rule)
-        }
-        
-        // Clear old data and mark migration complete
-        context.dataStore.edit { preferences ->
-            preferences[MIGRATION_COMPLETED_KEY] = true
-            preferences.remove(BLOCKED_APPS_KEY)
-        }
-        
-        Log.d("PreferencesManager", "Migration completed successfully")
+/**
+ * Migration from old system (one-time operation)
+ * This can be removed after all users have migrated
+ */
+suspend fun migrateOldBlockedApps() {
+    val migrationCompleted = context.dataStore.data
+        .map { it[MIGRATION_COMPLETED_KEY] ?: false }
+        .first()
+    
+    if (migrationCompleted) {
+        Log.d("PreferencesManager", "Migration already completed, skipping")
+        return
     }
+    
+    Log.d("PreferencesManager", "Migration completed - no old data to migrate")
+    
+    // Mark migration as complete
+    context.dataStore.edit { preferences ->
+        preferences[MIGRATION_COMPLETED_KEY] = true
+    }
+}
     
     // ========== JSON SERIALIZATION ==========
     

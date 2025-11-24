@@ -40,15 +40,11 @@ fun NavigationGraph(
     // Installed apps
     var allApps by remember { mutableStateOf(emptyList<AppInfo>()) }
 
-    // Blocked apps as a state
-    var blockedApps by remember {
-        mutableStateOf(emptySet<String>())
-    }
+  
 
     // Load once
     LaunchedEffect(Unit) {
         allApps = AppManager.getInstalledApps(context)
-        blockedApps = preferencesManager.blockedApps.first()
     }
 
     NavHost(

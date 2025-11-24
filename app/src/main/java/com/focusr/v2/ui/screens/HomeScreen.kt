@@ -66,7 +66,6 @@ import com.focusr.v2.AppManager
 import com.focusr.v2.AppMonitoringService
 //import com.focusr.v2.FocusBlockerAccessibilityService
 import com.focusr.v2.MainActivity
-import com.focusr.v2.MainViewModel
 import com.focusr.v2.PermissionHelper
 import com.focusr.v2.PermissionHelper.hasIgnoreBatteryOptimizationsPermission
 import com.focusr.v2.PermissionHelper.requestIgnoreBatteryOptimizations
@@ -86,17 +85,16 @@ enum class PermissionStep {
     COMPLETED
 }
 
+
 @Composable
-//fun HomeScreen(activity: ComponentActivity,navController: NavController) {
-fun HomeScreen(activity: MainActivity,navController: NavController) {
+fun HomeScreen(activity: MainActivity, navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preferencesManager = remember(context) { PreferencesManager(context.applicationContext) }
-    val viewModel: MainViewModel = viewModel { MainViewModel(preferencesManager) }
     var onResumeCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    val uiState by viewModel.uiState.collectAsState()
-
+    // ADD THIS STATE
+    var isEnabled by remember { mutableStateOf(false) }
 
     var showTimePicker by remember { mutableStateOf(false) }
     var isFromPicker by remember { mutableStateOf(true) }
@@ -104,16 +102,11 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
     var showPermissionDialog by remember { mutableStateOf(false) }
     var currentPermissionStep by remember { mutableStateOf(PermissionStep.COMPLETED) }
     var isWaitingForPermission by remember { mutableStateOf(false) }
-    val advancedMode = uiState.advancedMode
 
     val fromTimeState = rememberTimePickerState(
-        initialHour = uiState.fromTime.first,
-        initialMinute = uiState.fromTime.second,
         is24Hour = false
     )
     val toTimeState = rememberTimePickerState(
-        initialHour = uiState.toTime.first,
-        initialMinute = uiState.toTime.second,
         is24Hour = false
     )
 
@@ -138,28 +131,6 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
     val secondaryAccent = Color(0xFF4ECDC4)
     val errorAccent = Color(0xFFFF6B6B)
 
-    // Monitoring Service Functions
-    fun startMonitoringService() {
-        try {
-            viewModel.setWasBlockingEnabledBeforeReboot(true)
-            val intent = Intent(context, AppMonitoringService::class.java)
-            context.startForegroundService(intent)
-        } catch (e: Exception) {
-            Log.e("HomeScreen", "Failed to start service", e)
-        }
-    }
-
-    fun stopMonitoringService() {
-        try {
-            viewModel.setWasBlockingEnabledBeforeReboot(false)
-            val intent = Intent(context, AppMonitoringService::class.java)
-            context.stopService(intent)
-        } catch (e: Exception) {
-            Log.e("HomeScreen", "Failed to stop service", e)
-        }
-    }
-
-
     fun checkPermissionFlow() {
         if (!isWaitingForPermission) return
         when (currentPermissionStep) {
@@ -181,14 +152,8 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
             }
             PermissionStep.ACCESSIBILITY -> {
                 if (isAccessibilityServiceEnabled(context)) {
-                    currentPermissionStep = PermissionStep.COMPLETED
-                    showPermissionDialog = false
-                    isWaitingForPermission = false
-                    scope.launch {
-                        viewModel.setBlockingEnabled(true)
-                        delay(100)
-                        startMonitoringService()
-                    }
+                    currentPermissionStep = PermissionStep.BATTERY_OPTIMIZATION
+                    showPermissionDialog = true
                 } else {
                     showPermissionDialog = true
                 }
@@ -196,7 +161,11 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
             PermissionStep.BATTERY_OPTIMIZATION -> {
                 if (hasIgnoreBatteryOptimizationsPermission(context)) {
                     currentPermissionStep = PermissionStep.COMPLETED
-                    showPermissionDialog = true
+                    showPermissionDialog = false
+                    isWaitingForPermission = false
+                    // All permissions granted, enable the toggle
+                    isEnabled = true
+                    Toast.makeText(context, "All permissions granted! FocusR is ready.", Toast.LENGTH_SHORT).show()
                 } else {
                     showPermissionDialog = true
                 }
@@ -222,8 +191,6 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
         }
     }
 
-
-
     // MAIN LAYOUT
     Box(
         modifier = Modifier
@@ -248,132 +215,47 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
             ) {
                 item {
                     ModernStatusCard(
-                        isEnabled = uiState.blockingEnabled,
-                        pulseScale =  1f, // was giving error reset later
-//                        onToggle = { enabled ->
-//                            if (enabled) {
-//                                val hasUsageStats = PermissionHelper.hasUsageStatsPermission(context)
-//                                val hasOverlay = PermissionHelper.hasOverlayPermission(context)
-//                                val hasAccessibility = isAccessibilityServiceEnabled(context)
-//                               // val hasbatteryoptimization = hasIgnoreBatteryOptimizationsPermission(context)
-//                                val fromTime = uiState.fromTime
-//                                val toTime = uiState.toTime
-//                                val advancedMode = uiState.advancedMode
-//
-//                                showTimeValidationMessage(context, fromTime, toTime, advancedMode)
-//
-//                                when {
-//                                    !hasUsageStats -> {
-//                                        currentPermissionStep = PermissionStep.USAGE_STATS
-//                                        isWaitingForPermission = true
-//                                        showPermissionDialog = true
-//                                    }
-//                                    !hasOverlay -> {
-//                                        currentPermissionStep = PermissionStep.OVERLAY
-//                                        isWaitingForPermission = true
-//                                        showPermissionDialog = true
-//                                    }
-//                                    !hasAccessibility -> {
-//                                        currentPermissionStep = PermissionStep.ACCESSIBILITY
-//                                        isWaitingForPermission = true
-//                                        showPermissionDialog = true
-//                                    }
-//                                    !hasIgnoreBatteryOptimizationsPermission(context) -> {
-//                                        currentPermissionStep = PermissionStep.BATTERY_OPTIMIZATION
-//                                        isWaitingForPermission = true
-//                                        showPermissionDialog = true
-//                                    }
-//                                    else -> {
-//                                            scope.launch {
-////                                                viewModel.setBlockingEnabled(true)
-////                                                preferencesManager.setBlockingStartTime(System.currentTimeMillis())
-////                                                delay(100)
-////                                                startMonitoringService()
-//                                                onBlock
-//                                                Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
-//                                            }
-//                                    }
-//                                }
-//                            } else {
-//                                scope.launch {
-//                                    viewModel.setBlockingEnabled(false)
-//                                    stopMonitoringService()
-//                                    Toast.makeText(context, "FocusR Service Stopped.", Toast.LENGTH_SHORT).show()
-//                                }
-//                            }
-//                        },
+                        isEnabled = isEnabled, // ADD THIS
+                        pulseScale = 1f,
                         onToggle = { enabled ->
-
                             if (enabled) {
+                                // Check all permissions
                                 val hasUsageStats = PermissionHelper.hasUsageStatsPermission(context)
                                 val hasOverlay = PermissionHelper.hasOverlayPermission(context)
                                 val hasAccessibility = isAccessibilityServiceEnabled(context)
                                 val hasBatteryOptimization = hasIgnoreBatteryOptimizationsPermission(context)
 
+                                // Check if any permission is missing
+                                val missingPermission = when {
+                                    !hasUsageStats -> PermissionStep.USAGE_STATS
+                                    !hasOverlay -> PermissionStep.OVERLAY
+                                    !hasAccessibility -> PermissionStep.ACCESSIBILITY
+                                    !hasBatteryOptimization -> PermissionStep.BATTERY_OPTIMIZATION
+                                    else -> null
+                                }
 
-                                showTimeValidationMessage(context, uiState.fromTime, uiState.toTime, uiState.advancedMode)
-
-                                when {
-                                    !hasUsageStats -> {
-                                        currentPermissionStep = PermissionStep.USAGE_STATS
-                                        isWaitingForPermission = true
-                                        showPermissionDialog = true
-                                    }
-                                    !hasOverlay -> {
-                                        currentPermissionStep = PermissionStep.OVERLAY
-                                        isWaitingForPermission = true
-                                        showPermissionDialog = true
-                                    }
-                                    !hasAccessibility -> {
-                                        currentPermissionStep = PermissionStep.ACCESSIBILITY
-                                        isWaitingForPermission = true
-                                        showPermissionDialog = true
-                                    }
-                                    !hasBatteryOptimization -> {
-                                        currentPermissionStep = PermissionStep.BATTERY_OPTIMIZATION
-                                        isWaitingForPermission = true
-                                        showPermissionDialog = true
-                                    }
-                                    else -> {
-                                        // All permissions granted — call your main function here
-                                        if(!advancedMode){
-                                            scope.launch {
-                                                viewModel.setBlockingEnabled(true)
-                                                preferencesManager.setBlockingStartTime(System.currentTimeMillis())
-                                                delay(100)
-                                                startMonitoringService()
-                                                Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
-
-                                        }
-                                        }
-                                        else {
-                                            activity.onBlockingToggled(true)
-                                            Toast.makeText(
-                                                context,
-                                                "FocusR Service Started.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-
+                                // If any permission is missing, show permission dialog
+                                if (missingPermission != null) {
+                                    currentPermissionStep = missingPermission
+                                    isWaitingForPermission = true
+                                    showPermissionDialog = true
+                                } else {
+                                    // All permissions granted, enable blocking
+                                    isEnabled = true
+                                    scope.launch {
+                                        // Start your monitoring service here
+                                        // startMonitoringService()
+                                        Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             } else {
-                                if (!advancedMode){
-                                    scope.launch {
-                                    viewModel.setBlockingEnabled(false)
-                                    stopMonitoringService()
+                                // Disable blocking
+                                isEnabled = false
+                                scope.launch {
+                                    // Stop your monitoring service here
+                                    // stopMonitoringService()
                                     Toast.makeText(context, "FocusR Service Stopped.", Toast.LENGTH_SHORT).show()
                                 }
-                                }
-                                else {
-                                    // Disable blocking
-                                    activity.onBlockingToggled(false)
-                                    Toast.makeText(
-                                        context,
-                                        "FocusR Service Stopped.",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
                             }
                         },
                         glassCard = glassCard,
@@ -384,140 +266,30 @@ fun HomeScreen(activity: MainActivity,navController: NavController) {
                 }
 
                 item {
-                    ModernSettingsSection(
-                        advancedMode = uiState.advancedMode,
-                        fromTime = uiState.fromTime,
-                        toTime = uiState.toTime,
-//                        onAdvancedModeToggle = { scope.launch { viewModel.setAdvancedMode(it) } },
-
-                        // Replace your existing onAdvancedModeToggle callback with this:
-                        onAdvancedModeToggle = { newAdvancedMode ->
-                            scope.launch {
-                                // Reset everything
-                                viewModel.setBlockingEnabled(false)
-                                val serviceScheduler = ServiceScheduler(context)
-                                serviceScheduler.resetService()
-
-                                // Update the mode
-                                viewModel.setAdvancedMode(newAdvancedMode)
-
-
-                                if(uiState.blockingEnabled){
-                                // Inform user
-                                Toast.makeText(
-                                    context,
-                                    "Mode changed. Service stopped and reset. Please configure and start again.",
-                                    Toast.LENGTH_SHORT
-                                ).show()}
-                            }
-                        },
-                        onFromTimeClick = {
-                            isFromPicker = true
-                            showTimePicker = true
-                        },
-                        onToTimeClick = {
-                            isFromPicker = false
-                            showTimePicker = true
-                        },
-                        glassCard = glassCard,
-                        selectedGlassCard = selectedGlassCard,
-                        primaryAccent = primaryAccent,
-                        secondaryAccent = secondaryAccent
-                    )
-                }
-
-                item {
-                    ModernBlockedAppsSection(
-                        blockedApps = uiState.blockedApps,
-                        onAddApps = { showAppSelection = true },
-                        onRemoveApp = { packageName ->
-                            scope.launch {
-                                val updatedApps = uiState.blockedApps.toMutableSet()
-                                updatedApps.remove(packageName)
-                                viewModel.setBlockedApps(updatedApps)
-                            }
-                        },
-                        glassCard = glassCard,
-                        errorAccent = errorAccent
-                    )
-                }
-                item{
-                    // Option A: Simple Button
-Button(
-    onClick = { navController.navigate(Screen.ManageRules.route) },
-    modifier = Modifier
-        .fillMaxWidth()
-        .height(56.dp),
-    shape = RoundedCornerShape(16.dp),
-    colors = ButtonDefaults.buttonColors(
-        containerColor = Color(0xFF6C63FF)
-    )
-) {
-    Icon(
-        imageVector = Icons.Outlined.Rule,
-        contentDescription = null,
-        modifier = Modifier.size(24.dp)
-    )
-    Spacer(modifier = Modifier.width(12.dp))
-    Text(
-        text = "Manage Rules",
-        fontSize = 16.sp,
-        fontWeight = FontWeight.SemiBold
-    )
-}
-                }
-            }
-
-            if (showTimePicker) {
-                // Create local variables to store current time values
-                val currentTime = remember {
-                    val now = Calendar.getInstance()
-                    Pair(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE))
-                }
-
-                var fromHour by remember { mutableStateOf(currentTime.first) }
-                var fromMinute by remember { mutableStateOf(currentTime.second) }
-                var toHour by remember { mutableStateOf(currentTime.first) }
-                var toMinute by remember { mutableStateOf(currentTime.second) }
-                ModernTimePickerDialog(
-                    isFromPicker = isFromPicker,
-                    initialHour = if (isFromPicker) fromHour else toHour,
-                    initialMinute = if (isFromPicker) fromMinute else toMinute,
-                    onDismiss = { showTimePicker = false },
-                    onConfirm = { hour, minute ->
-                        scope.launch {
-                            val wasRunning = uiState.blockingEnabled
-
-                            // Always stop and reset service if it was running (for both simple and advanced mode)
-                            if (wasRunning) {
-                                viewModel.setBlockingEnabled(false)
-                                val serviceScheduler = ServiceScheduler(context)
-                                serviceScheduler.resetService()
-                            }
-
-                            // Update the time variables and viewModel
-                            if (isFromPicker) {
-                                fromHour = hour
-                                fromMinute = minute
-                                viewModel.setFromTime(hour, minute)
-                            } else {
-                                toHour = hour
-                                toMinute = minute
-                                viewModel.setToTime(hour, minute)
-                            }
-
-                            // Show appropriate message
-                            if (wasRunning) {
-                                Toast.makeText(
-                                    context,
-                                    "Time updated. Service stopped and reset. Please restart the service.",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                        showTimePicker = false
+                    // Manage Rules Button
+                    Button(
+                        onClick = { navController.navigate(Screen.ManageRules.route) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF6C63FF)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Rule,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Manage Rules",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
-                )
+                }
             }
 
             if (showPermissionDialog) {
@@ -526,9 +298,6 @@ Button(
                     onDismiss = {
                         showPermissionDialog = false
                         isWaitingForPermission = false
-                        if (uiState.blockingEnabled) {
-                            scope.launch { viewModel.setBlockingEnabled(false) }
-                        }
                     },
                     onGrantPermission = {
                         when (currentPermissionStep) {
@@ -554,10 +323,6 @@ Button(
                             }
                         }
                     }
-                    //,
-//                    glassCard = glassCard,
-//                    primaryAccent = primaryAccent,
-//                    errorAccent = errorAccent
                 )
             }
         }
@@ -699,330 +464,10 @@ fun ModernStatusCard(
         }
     }
 }
-@Composable
-fun ModernSettingsSection(
-    advancedMode: Boolean,
-    fromTime: Pair<Int, Int>,
-    toTime: Pair<Int, Int>,
-    onAdvancedModeToggle: (Boolean) -> Unit,
-    onFromTimeClick: () -> Unit,
-    onToTimeClick: () -> Unit,
-    glassCard: Color,
-    selectedGlassCard: Color,
-    primaryAccent: Color,
-    secondaryAccent: Color
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (advancedMode) selectedGlassCard else glassCard,
-                RoundedCornerShape(20.dp)
-            )
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.4f),
-                        Color.White.copy(alpha = 0.1f)
-                    )
-                ),
-                shape = RoundedCornerShape(20.dp)
-            ),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-//        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = null,
-                        tint = primaryAccent
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "Advanced Mode",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                }
-                Switch(
-                    checked = advancedMode,
-                    onCheckedChange = onAdvancedModeToggle,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = primaryAccent,
-                        checkedTrackColor = primaryAccent.copy(alpha = 0.5f),
-                        uncheckedThumbColor = Color.White.copy(alpha = 0.8f),
-                        uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
-                    )
-                )
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
 
-            if (advancedMode) {
-                ModernTimeButton(
-                    icon = Icons.Outlined.PlayArrow,
-                    label = "Block FROM",
-                    time = formatTime(fromTime.first, fromTime.second),
-                    onClick = onFromTimeClick,
-                    color = secondaryAccent
-                )
 
-                Spacer(modifier = Modifier.height(12.dp))
 
-                ModernTimeButton(
-                    icon = Icons.Outlined.Stop,
-                    label = "Block TO",
-                    time = formatTime(toTime.first, toTime.second),
-                    onClick = onToTimeClick,
-                    color = primaryAccent
-                )
-            } else {
-                ModernTimeButton(
-                    icon = Icons.Outlined.Schedule,
-                    label = "Block apps until (Select time onward till before Midnight)",
-                    time = formatTime(toTime.first, toTime.second),
-                    onClick = onToTimeClick,
-                    color = primaryAccent
-                )
-            }
-        }
-    }
-}
-
-//@Composable
-//fun ModernTimeButton(
-//    icon: ImageVector,
-//    label: String,
-//    time: String,
-//    onClick: () -> Unit,
-//    color: Color,
-//    glassCard: Color
-//) {
-//    Card(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .clickable { onClick() }
-//            .drawBehind {
-//                // Glassmorphism border effect
-//                drawRoundRect(
-//                    color = Color.White.copy(alpha = 0.2f),
-//                    topLeft = Offset(0f, 0f),
-//                    size = Size(size.width, size.height),
-//                    cornerRadius = CornerRadius(32f, 32f),
-//                    style = Stroke(width = 1.dp.toPx())
-//                )
-//            },
-//        colors = CardDefaults.cardColors(
-//            containerColor = glassCard
-//        ),
-//        shape = RoundedCornerShape(16.dp),
-//        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-//    ) {
-//        Box(
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .background(
-//                    Brush.horizontalGradient(
-//                        colors = listOf(
-//                            Color.White.copy(alpha = 0.1f),
-//                            Color.White.copy(alpha = 0.05f)
-//                        )
-//                    )
-//                )
-//        ) {
-//            Row(
-//                modifier = Modifier
-//                    .fillMaxWidth()
-//                    .padding(16.dp),
-//                horizontalArrangement = Arrangement.SpaceBetween,
-//                verticalAlignment = Alignment.CenterVertically
-//            ) {
-//                Row(
-//                    verticalAlignment = Alignment.CenterVertically,
-//                    modifier = Modifier.weight(1f)
-//                ) {
-//                    Icon(
-//                        imageVector = icon,
-//                        contentDescription = null,
-//                        tint = color,
-//                        modifier = Modifier.size(20.dp)
-//                    )
-//                    Spacer(modifier = Modifier.width(8.dp))
-//                    Text(
-//                        text = label,
-//                        style = MaterialTheme.typography.bodyMedium,
-//                        fontWeight = FontWeight.Medium,
-//                        color = Color.White.copy(alpha = 0.9f)
-//                    )
-//                }
-//
-//                Text(
-//                    text = time,
-//                    style = MaterialTheme.typography.titleMedium,
-//                    fontWeight = FontWeight.Bold,
-//                    color = color
-//                )
-//            }
-//        }
-//    }
-//}
-@Composable
-fun ModernBlockedAppsSection(
-    blockedApps: Set<String>,
-    onAddApps: () -> Unit,
-    onRemoveApp: (String) -> Unit,
-    glassCard: Color,
-    errorAccent: Color
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(glassCard, RoundedCornerShape(20.dp))
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.4f),
-                        Color.White.copy(alpha = 0.1f)
-                    )
-                ),
-                shape = RoundedCornerShape(20.dp)
-            ),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-//        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Block,
-                        contentDescription = null,
-                        tint = errorAccent
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            "Blocked Apps",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                        Text(
-                            "${blockedApps.size} apps selected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
-
-            if (blockedApps.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 200.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(blockedApps.toList()) { packageName ->
-                        ModernAppItem(
-                            packageName = packageName,
-                            onRemove = { onRemoveApp(packageName) },
-                            errorAccent = errorAccent
-                        )
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.height(16.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Outlined.Apps,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = Color.White.copy(alpha = 0.4f)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "No apps selected",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ModernAppItem(
-    packageName: String,
-    onRemove: () -> Unit,
-    errorAccent: Color
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Color.White.copy(alpha = 0.1f),
-                RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(12.dp)
-            ),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = packageName,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-                color = Color.White
-            )
-
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.Close,
-                    contentDescription = "Remove",
-                    tint = errorAccent,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun ModernPermissionDialog(
@@ -1405,90 +850,3 @@ fun isAccessibilityServiceEnabled(context: Context): Boolean {
 
 
 
-
-fun getCurrentTime(): String {
-    val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
-    return sdf.format(Date())
-}
-
-fun formatTime(hour: Int, minute: Int): String {
-    val cal = Calendar.getInstance()
-    cal.set(Calendar.HOUR_OF_DAY, hour)
-    cal.set(Calendar.MINUTE, minute)
-    return SimpleDateFormat("hh:mm a", Locale.getDefault()).format(cal.time)
-}
-
-
-fun showTimeValidationMessage(
-    context: Context,
-    fromTime: Pair<Int, Int>,
-    toTime: Pair<Int, Int>,
-    isAdvancedMode: Boolean
-) {
-    val now = Calendar.getInstance()
-    val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-    val fromMinutes = fromTime.first * 60 + fromTime.second
-    val toMinutes = toTime.first * 60 + toTime.second
-
-    fun formatTime(pair: Pair<Int, Int>): String {
-        val hour = pair.first
-        val minute = pair.second
-        val amPm = if (hour >= 12) "PM" else "AM"
-        val formattedHour = when {
-            hour == 0 -> 12
-            hour > 12 -> hour - 12
-            else -> hour
-        }
-        return "${formattedHour}:${minute.toString().padStart(2, '0')} $amPm"
-    }
-
-    if (!isAdvancedMode) {
-        // 🔹 Simple Mode
-        if (toMinutes <= currentMinutes) {
-            Toast.makeText(context, "Please select a future time", Toast.LENGTH_SHORT).show()
-        } else if (toMinutes > (23 * 60 + 59)) {
-            Toast.makeText(context, "Simple mode only supports blocking before midnight", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(context, "Blocking will end at ${formatTime(toTime)}", Toast.LENGTH_SHORT).show()
-        }
-    } else {
-        // 🔸 Advanced Mode
-        if (fromMinutes > toMinutes) {
-            // Overnight session
-            if (fromMinutes >= currentMinutes) {
-                Toast.makeText(
-                    context,
-                    "Session will start today at ${formatTime(fromTime)} and end tomorrow at ${formatTime(toTime)}",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else {
-                Toast.makeText(
-                    context,
-                    "Session has started and will end tomorrow at ${formatTime(toTime)}",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        } else {
-            // Same-day session
-            if (fromMinutes >= currentMinutes) {
-                Toast.makeText(
-                    context,
-                    "Session will start today at ${formatTime(fromTime)} and end at ${formatTime(toTime)}",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else if (currentMinutes in fromMinutes..toMinutes) {
-                Toast.makeText(
-                    context,
-                    "Blocking session is currently active and will end at ${formatTime(toTime)}",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else {
-                Toast.makeText(
-                    context,
-                    "Session has already ended for today.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        }
-    }
-}
