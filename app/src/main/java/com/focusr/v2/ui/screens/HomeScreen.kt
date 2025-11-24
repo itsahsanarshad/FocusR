@@ -69,6 +69,13 @@ import com.focusr.v2.R
 import com.focusr.v2.ServiceScheduler
 import com.focusr.v2.navigation.Screen
 import com.focusr.v2.ui.components.ModernTopBar
+import com.focusr.v2.ui.components.RuleStatusCard
+import com.focusr.v2.ui.components.PauseAllDialog
+import com.focusr.v2.ui.components.ActiveRulesSection
+import com.focusr.v2.ui.components.OnboardingScreen
+import com.focusr.v2.ui.viewmodels.RuleViewModel
+import com.focusr.v2.BlockingTimeManager
+
 enum class PermissionStep {
     USAGE_STATS,
     OVERLAY,
@@ -84,14 +91,35 @@ fun HomeScreen(activity: MainActivity, navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preferencesManager = remember(context) { PreferencesManager(context.applicationContext) }
-    var onResumeCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
-
-    // ADD THIS STATE
-    var isEnabled by remember { mutableStateOf(false) }
-
+    val blockingTimeManager = remember(context) { BlockingTimeManager(preferencesManager) }
+    
+    // ViewModel
+    val ruleViewModel: RuleViewModel = viewModel {
+        RuleViewModel(preferencesManager, blockingTimeManager, context)
+    }
+    val rulesState by ruleViewModel.uiState.collectAsState()
+    
+    // First launch detection
+    val isFirstLaunch by preferencesManager.isFirstLaunch.collectAsState(initial = false)
+    val pauseUntil by preferencesManager.pauseUntil.collectAsState(initial = null)
+    
+    // UI State
+    var showPauseDialog by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
-    var currentPermissionStep by remember { mutableStateOf(PermissionStep.COMPLETED) }
+    var currentPermissionStep by remember { mutableStateOf(PermissionStep.USAGE_STATS) }
     var isWaitingForPermission by remember { mutableStateOf(false) }
+
+    // Check if paused
+    val currentPauseTime = pauseUntil  // Store in local variable
+    val isPaused = currentPauseTime != null && currentPauseTime > System.currentTimeMillis()
+
+// Auto-resume if pause expired
+    LaunchedEffect(pauseUntil) {
+        val pauseTime = pauseUntil  // Store in local variable for the effect
+        if (pauseTime != null && pauseTime <= System.currentTimeMillis()) {
+            ruleViewModel.resumeAllRules()
+        }
+    }
 
 
     // Glassmorphism Design Tokens
@@ -113,6 +141,27 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
         repeatMode = RepeatMode.Reverse
     )
 )
+    // First launch flow
+    if (isFirstLaunch) {
+        OnboardingScreen(
+            onComplete = {
+                scope.launch {
+                    preferencesManager.setFirstLaunchCompleted()
+                }
+            },
+            onStartPermissions = {
+                scope.launch {
+                    // Mark first launch as complete
+                    preferencesManager.setFirstLaunchCompleted()
+                }
+                // Start permission flow
+                currentPermissionStep = PermissionStep.USAGE_STATS
+                isWaitingForPermission = true
+                showPermissionDialog = true
+            }
+        )
+        return
+    }
 
     fun checkPermissionFlow() {
         if (!isWaitingForPermission) return
@@ -147,7 +196,6 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
                     showPermissionDialog = false
                     isWaitingForPermission = false
                     // All permissions granted, enable the toggle
-                    isEnabled = true
                     Toast.makeText(context, "All permissions granted! FocusR is ready.", Toast.LENGTH_SHORT).show()
                 } else {
                     showPermissionDialog = true
@@ -189,91 +237,107 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
         ) { innerPadding ->
 
             LazyColumn(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                contentPadding = PaddingValues(vertical = 16.dp)
+    modifier = Modifier
+        .fillMaxSize()
+        .padding(innerPadding)
+        .padding(horizontal = 16.dp),
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+    contentPadding = PaddingValues(vertical = 16.dp)
+) {
+    // Status Card
+    item {
+        RuleStatusCard(
+            totalRules = rulesState.allRules.size,
+            activeRules = rulesState.activeRulesCount,
+            blockedApps = rulesState.blockedAppsCount,
+            nextActivation = ruleViewModel.getNextRuleActivation(),
+            isPaused = isPaused,
+            pauseUntil = pauseUntil
+        )
+    }
+    
+    // Active Rules Section
+    item {
+        val activeRules = rulesState.allRules.filter { rule ->
+            rule.enabled && blockingTimeManager.isRuleActive(rule)
+        }
+        if (activeRules.isNotEmpty()) {
+            ActiveRulesSection(activeRules)
+        }
+    }
+    
+    // Quick Actions
+    item {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Manage Rules Button
+            Button(
+                onClick = { navController.navigate(Screen.ManageRules.route) },
+                modifier = Modifier.weight(1f).height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF6C63FF)
+                ),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                item {
-                    ModernStatusCard(
-                        isEnabled = isEnabled, // ADD THIS
-                        pulseScale = if (isEnabled) pulseAnimation else 1f,
-                        onToggle = { enabled ->
-                            if (enabled) {
-                                // Check all permissions
-                                val hasUsageStats = PermissionHelper.hasUsageStatsPermission(context)
-                                val hasOverlay = PermissionHelper.hasOverlayPermission(context)
-                                val hasAccessibility = isAccessibilityServiceEnabled(context)
-                                val hasBatteryOptimization = hasIgnoreBatteryOptimizationsPermission(context)
-
-                                // Check if any permission is missing
-                                val missingPermission = when {
-                                    !hasUsageStats -> PermissionStep.USAGE_STATS
-                                    !hasOverlay -> PermissionStep.OVERLAY
-                                    !hasAccessibility -> PermissionStep.ACCESSIBILITY
-                                    !hasBatteryOptimization -> PermissionStep.BATTERY_OPTIMIZATION
-                                    else -> null
-                                }
-
-                                // If any permission is missing, show permission dialog
-                                if (missingPermission != null) {
-                                    currentPermissionStep = missingPermission
-                                    isWaitingForPermission = true
-                                    showPermissionDialog = true
-                                } else {
-                                    // All permissions granted, enable blocking
-                                    isEnabled = true
-                                    scope.launch {
-                                        // Start your monitoring service here
-                                        // startMonitoringService()
-                                        Toast.makeText(context, "FocusR Service Started.", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            } else {
-                                // Disable blocking
-                                isEnabled = false
-                                scope.launch {
-                                    // Stop your monitoring service here
-                                    // stopMonitoringService()
-                                    Toast.makeText(context, "FocusR Service Stopped.", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        glassCard = glassCard,
-                        selectedGlassCard = selectedGlassCard,
-                        primaryAccent = primaryAccent,
-                        errorAccent = errorAccent
+                Icon(
+                    imageVector = Icons.Outlined.Rule,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Manage Rules", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+            
+            // Pause/Resume Button (only if there are active rules)
+            if (rulesState.activeRulesCount > 0) {
+                OutlinedButton(
+                    onClick = {
+                        if (isPaused) {
+                            ruleViewModel.resumeAllRules()
+                            Toast.makeText(context, "Blocking resumed", Toast.LENGTH_SHORT).show()
+                        } else {
+                            showPauseDialog = true
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFFB84D)),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPaused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB84D),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isPaused) "Resume" else "Pause All",
+                        color = Color(0xFFFFB84D),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-
-                item {
-                    // Manage Rules Button
-                    Button(
-                        onClick = { navController.navigate(Screen.ManageRules.route) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF6C63FF)
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Rule,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Manage Rules",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
             }
+        }
+    }
+}
+           // Pause Dialog
+        if (showPauseDialog) {
+            PauseAllDialog(
+                onDismiss = { showPauseDialog = false },
+                onPause = { minutes ->
+                    ruleViewModel.pauseAllRules(minutes)
+                    val message = if (minutes != null) {
+                        "Paused for $minutes minutes"
+                    } else {
+                        "Paused until you resume"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
 
             if (showPermissionDialog) {
                 ModernPermissionDialog(
@@ -312,141 +376,7 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
     }
 }
 
-@Composable
-fun ModernStatusCard(
-    isEnabled: Boolean,
-    pulseScale: Float , // Use the animation value
-    onToggle: (Boolean) -> Unit,
-    glassCard: Color,
-    selectedGlassCard: Color,
-    primaryAccent: Color,
-    errorAccent: Color
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(pulseScale)
-            .blur(radius = 0.dp)
-            .background(
-                if (isEnabled) selectedGlassCard else glassCard,
-                RoundedCornerShape(24.dp)
-            )
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.4f),
-                        Color.White.copy(alpha = 0.1f)
-                    )
-                ),
-                shape = RoundedCornerShape(24.dp)
-            ),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-//        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Status Icon with Animation
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = if (isEnabled) listOf(
-                                primaryAccent.copy(alpha = 0.4f),
-                                primaryAccent.copy(alpha = 0.1f)
-                            ) else listOf(
-                                errorAccent.copy(alpha = 0.4f),
-                                errorAccent.copy(alpha = 0.1f)
-                            )
-                        )
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = if (isEnabled) primaryAccent.copy(alpha = 0.6f)
-                        else errorAccent.copy(alpha = 0.6f),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                AnimatedContent(
-                    targetState = isEnabled,
-                    transitionSpec = {
-                        slideInVertically() + fadeIn() with slideOutVertically() + fadeOut()
-                    }
-                ) { enabled ->
-                    Icon(
-                        imageVector = if (enabled) Icons.Filled.Shield else Icons.Filled.Cancel,
-                        contentDescription = null,
-                        modifier = Modifier.size(40.dp),
-                        tint = if (enabled) primaryAccent else errorAccent
-                    )
-                }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = if (isEnabled) "Protection Active" else "Protection Disabled",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    color = Color.White
-                )
-
-                Text(
-                    text = if (isEnabled) "Your focus is protected from distractions"
-                    else "Tap the switch below to enable protection",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Modern Toggle Switch
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "OFF",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (!isEnabled) FontWeight.Bold else FontWeight.Normal,
-                    color = if (!isEnabled) primaryAccent else Color.White.copy(alpha = 0.6f)
-                )
-
-                Switch(
-                    checked = isEnabled,
-                    onCheckedChange = onToggle,
-                    modifier = Modifier.scale(1.2f),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = primaryAccent,
-                        checkedTrackColor = primaryAccent.copy(alpha = 0.5f),
-                        uncheckedThumbColor = Color.White.copy(alpha = 0.8f),
-                        uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
-                    )
-                )
-
-                Text(
-                    text = "ON",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (isEnabled) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isEnabled) primaryAccent else Color.White.copy(alpha = 0.6f)
-                )
-            }
-        }
-    }
-}
 
 
 

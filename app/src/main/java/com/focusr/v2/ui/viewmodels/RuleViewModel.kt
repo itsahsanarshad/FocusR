@@ -12,7 +12,9 @@ data class RuleUiState(
     val allRules: List<BlockingRule> = emptyList(),
     val activeRulesCount: Int = 0,
     val blockedAppsCount: Int = 0,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isPaused: Boolean = false,
+    val pauseUntil: Long? = null
 )
 
 class RuleViewModel(
@@ -25,18 +27,26 @@ class RuleViewModel(
     val uiState: StateFlow<RuleUiState> = _uiState.asStateFlow()
 
     init {
-        // Collect rules and update UI state
+        // Collect rules and pause state, update UI
         viewModelScope.launch {
-            preferencesManager.blockingRules.collect { rules ->
+            combine(
+                preferencesManager.blockingRules,
+                preferencesManager.pauseUntil
+            ) { rules, pauseUntil ->
                 val activeCount = blockingTimeManager.getActiveRulesCount()
                 val blockedCount = blockingTimeManager.getCurrentlyBlockedApps().size
+                val isPaused = pauseUntil != null && pauseUntil > System.currentTimeMillis()
                 
-                _uiState.value = RuleUiState(
+                RuleUiState(
                     allRules = rules,
                     activeRulesCount = activeCount,
                     blockedAppsCount = blockedCount,
-                    isLoading = false
+                    isLoading = false,
+                    isPaused = isPaused,
+                    pauseUntil = pauseUntil
                 )
+            }.collect { newState ->
+                _uiState.value = newState
             }
         }
     }
@@ -129,5 +139,88 @@ class RuleViewModel(
      */
     fun getRuleById(ruleId: String): BlockingRule? {
         return _uiState.value.allRules.find { it.id == ruleId }
+    }
+    
+    // ========== PAUSE FUNCTIONALITY ==========
+    
+    /**
+     * Pause all rules for a specified duration
+     * @param durationMinutes Duration in minutes, null for indefinite pause
+     */
+    fun pauseAllRules(durationMinutes: Int?) {
+        viewModelScope.launch {
+            val pauseUntil = if (durationMinutes != null) {
+                System.currentTimeMillis() + (durationMinutes * 60 * 1000)
+            } else {
+                Long.MAX_VALUE // Paused until manual resume
+            }
+            preferencesManager.setPauseUntil(pauseUntil)
+            
+            // Stop service
+            val scheduler = com.focusr.v2.ServiceScheduler(context)
+            scheduler.cancelScheduledService()
+            val intent = android.content.Intent(context, com.focusr.v2.AppMonitoringService::class.java)
+            context.stopService(intent)
+        }
+    }
+    
+    /**
+     * Resume all rules (unpause)
+     */
+    fun resumeAllRules() {
+        viewModelScope.launch {
+            preferencesManager.setPauseUntil(null)
+            // Service will auto-start based on active rules
+            scheduleServiceIfNeeded()
+        }
+    }
+    
+    /**
+     * Get next rule activation time as formatted string
+     * @return Formatted string like "Study Mode in 2h 15m" or null if no upcoming rules
+     */
+    fun getNextRuleActivation(): String? {
+        val now = System.currentTimeMillis()
+        val calendar = java.util.Calendar.getInstance()
+        val currentMinutes = calendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + 
+                           calendar.get(java.util.Calendar.MINUTE)
+        
+        // Find next rule that will activate
+        val upcomingRules = _uiState.value.allRules
+            .filter { it.enabled }
+            .mapNotNull { rule ->
+                when (rule.ruleType) {
+                    com.focusr.v2.models.RuleType.SIMPLE -> {
+                        val blockUntil = rule.blockUntilTime ?: return@mapNotNull null
+                        val blockUntilMinutes = blockUntil.first * 60 + blockUntil.second
+                        if (currentMinutes < blockUntilMinutes) {
+                            val minutesUntil = blockUntilMinutes - currentMinutes
+                            Pair(rule, minutesUntil)
+                        } else null
+                    }
+                    com.focusr.v2.models.RuleType.SCHEDULED -> {
+                        val fromTime = rule.fromTime ?: return@mapNotNull null
+                        val fromMinutes = fromTime.first * 60 + fromTime.second
+                        val minutesUntil = if (currentMinutes < fromMinutes) {
+                            fromMinutes - currentMinutes
+                        } else {
+                            (1440 - currentMinutes) + fromMinutes // Next day
+                        }
+                        Pair(rule, minutesUntil)
+                    }
+                }
+            }
+            .minByOrNull { it.second }
+        
+        return upcomingRules?.let { (rule, minutes) ->
+            val hours = minutes / 60
+            val mins = minutes % 60
+            val timeStr = when {
+                hours > 0 && mins > 0 -> "${hours}h ${mins}m"
+                hours > 0 -> "${hours}h"
+                else -> "${mins}m"
+            }
+            "${rule.getDisplayName()} in $timeStr"
+        }
     }
 }

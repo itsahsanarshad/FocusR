@@ -130,9 +130,9 @@ Log.d("AppMonitoringService", "Enabled rules: ${enabledRules.size}, Active rules
             return null
             }
                 // Log all recent apps
-    usageStatsList.forEach {
-        Log.d("ForegroundApp", "App: ${it.packageName}, Last used: ${time - it.lastTimeUsed}ms ago")
-    }
+    //usageStatsList.forEach {
+     //   Log.d("ForegroundApp", "App: ${it.packageName}, Last used: ${time - it.lastTimeUsed}ms ago")
+   // }
 
         // Find the most recently used app
         val recentApp = usageStatsList.maxByOrNull { it.lastTimeUsed }

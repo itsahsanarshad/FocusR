@@ -12,6 +12,14 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
      * Check if a specific app should be blocked based on its rules
      */
    suspend fun shouldBlockApp(packageName: String): Boolean {
+
+    // Check if paused - don't block any apps when paused
+    val pauseUntil = preferencesManager.pauseUntil.first()
+    if (pauseUntil != null && pauseUntil > System.currentTimeMillis()) {
+        Log.d("BlockingTimeManager", "⏸ PAUSED - Not blocking $packageName")
+        return false
+    }
+    
     val allRules = preferencesManager.blockingRules.first()
     
     Log.d("BlockingTimeManager", "=== Checking $packageName ===")

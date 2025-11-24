@@ -22,6 +22,14 @@ class PreferencesManager(private val context: Context) {
         // New rule-based storage
         private val BLOCKING_RULES_KEY = stringPreferencesKey("blocking_rules_json")
         private val MIGRATION_COMPLETED_KEY = booleanPreferencesKey("migration_completed")
+
+         // Pause state
+        private val PAUSE_UNTIL_KEY = longPreferencesKey("pause_until_timestamp")
+        
+        // First launch detection
+        private val FIRST_LAUNCH_KEY = booleanPreferencesKey("first_launch_completed")
+
+        
     }
 
 
@@ -100,6 +108,46 @@ class PreferencesManager(private val context: Context) {
      */
     suspend fun getAllActiveRules(): List<BlockingRule> {
         return blockingRules.first().filter { it.enabled }
+    }
+
+    // ========== PAUSE STATE MANAGEMENT ==========
+    
+    /**
+     * Timestamp until which all rules are paused (null = not paused)
+     */
+    val pauseUntil: Flow<Long?> = context.dataStore.data.map { preferences ->
+        preferences[PAUSE_UNTIL_KEY]
+    }
+    
+    /**
+     * Check if this is the first launch of the app
+     */
+    val isFirstLaunch: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        !(preferences[FIRST_LAUNCH_KEY] ?: false)
+    }
+    
+    /**
+     * Set pause until timestamp (null to unpause)
+     */
+    suspend fun setPauseUntil(timestamp: Long?) {
+        context.dataStore.edit { preferences ->
+            if (timestamp != null) {
+                preferences[PAUSE_UNTIL_KEY] = timestamp
+            } else {
+                preferences.remove(PAUSE_UNTIL_KEY)
+            }
+        }
+        Log.d("PreferencesManager", "Pause state updated: $timestamp")
+    }
+    
+    /**
+     * Mark first launch as completed
+     */
+    suspend fun setFirstLaunchCompleted() {
+        context.dataStore.edit { preferences ->
+            preferences[FIRST_LAUNCH_KEY] = true
+        }
+        Log.d("PreferencesManager", "First launch completed")
     }
     
 /**
