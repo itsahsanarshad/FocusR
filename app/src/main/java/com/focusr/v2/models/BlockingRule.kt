@@ -9,10 +9,10 @@ import java.util.*
 data class BlockingRule(
     val id: String = UUID.randomUUID().toString(),
     
-    // NEW: Rule name for alarm-style UI
+    // Rule name for alarm-style UI
     val name: String = "",
     
-    // NEW: Multiple apps support
+    // Multiple apps support
     val packageNames: List<String> = emptyList(),
     
     // OLD: Single app (kept for backward compatibility)
@@ -23,7 +23,12 @@ data class BlockingRule(
     val enabled: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     
-    // For SIMPLE rules - block until specific time today
+    // For SIMPLE rules - duration-based blocking
+    val durationMinutes: Int? = null,  // Duration in minutes (15, 30, 60, 120, etc.)
+    val activatedAt: Long? = null,     // Timestamp when rule was activated
+    
+    // OLD: block until time (kept for backward compatibility migration)
+    @Deprecated("Use durationMinutes instead")
     val blockUntilTime: Pair<Int, Int>? = null,  // (hour, minute)
     
     // For SCHEDULED rules - recurring schedule
@@ -70,7 +75,7 @@ data class BlockingRule(
     fun isValid(): Boolean {
         val hasApps = getApps().isNotEmpty()
         val hasValidTimes = when (ruleType) {
-            RuleType.SIMPLE -> blockUntilTime != null
+            RuleType.SIMPLE -> durationMinutes != null && durationMinutes > 0
             RuleType.SCHEDULED -> fromTime != null && toTime != null
         }
         return hasApps && hasValidTimes
@@ -82,8 +87,18 @@ data class BlockingRule(
     fun getDescription(): String {
         return when (ruleType) {
             RuleType.SIMPLE -> {
-                val (hour, minute) = blockUntilTime ?: return "Invalid rule"
-                "Until ${formatTime(hour, minute)} today"
+                val duration = durationMinutes ?: return "Invalid rule"
+                val durationText = formatDuration(duration)
+                if (activatedAt != null) {
+                    val remaining = getRemainingMinutes()
+                    if (remaining != null && remaining > 0) {
+                        "$durationText (${formatDuration(remaining)} left)"
+                    } else {
+                        "$durationText (expired)"
+                    }
+                } else {
+                    "For $durationText"
+                }
             }
             RuleType.SCHEDULED -> {
                 val (fromH, fromM) = fromTime ?: return "Invalid rule"
@@ -92,6 +107,18 @@ data class BlockingRule(
                 "${formatTime(fromH, fromM)} - ${formatTime(toH, toM)} ($daysText)"
             }
         }
+    }
+    
+    /**
+     * Gets remaining minutes for SIMPLE rules
+     */
+    fun getRemainingMinutes(): Int? {
+        if (ruleType != RuleType.SIMPLE) return null
+        val duration = durationMinutes ?: return null
+        val activated = activatedAt ?: return null
+        val expiresAt = activated + (duration * 60 * 1000L)
+        val remaining = (expiresAt - System.currentTimeMillis()) / 1000 / 60
+        return remaining.toInt().coerceAtLeast(0)
     }
     
     /**
@@ -114,6 +141,14 @@ data class BlockingRule(
             else -> hour
         }
         return String.format("%d:%02d %s", displayHour, minute, period)
+    }
+    
+    private fun formatDuration(minutes: Int): String {
+        return when {
+            minutes < 60 -> "${minutes}m"
+            minutes % 60 == 0 -> "${minutes / 60}h"
+            else -> "${minutes / 60}h ${minutes % 60}m"
+        }
     }
 }
 

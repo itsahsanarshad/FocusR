@@ -116,16 +116,24 @@ class RuleViewModel(
 
     /**
      * Toggle rule enabled/disabled
+     * For SIMPLE rules: when enabling, reset activatedAt to restart the timer
      */
-   fun toggleRuleEnabled(ruleId: String) {
-    viewModelScope.launch {
-        val rule = _uiState.value.allRules.find { it.id == ruleId }
-        rule?.let {
-            preferencesManager.updateRule(it.copy(enabled = !it.enabled))
-            scheduleServiceIfNeeded()  // NEW
+    fun toggleRuleEnabled(ruleId: String) {
+        viewModelScope.launch {
+            val rule = _uiState.value.allRules.find { it.id == ruleId }
+            rule?.let {
+                val updatedRule = if (!it.enabled && it.ruleType == com.focusr.v2.models.RuleType.SIMPLE) {
+                    // Enabling a SIMPLE rule - reset the activation time to restart timer
+                    it.copy(enabled = true, activatedAt = System.currentTimeMillis())
+                } else {
+                    // Just toggle enabled state
+                    it.copy(enabled = !it.enabled)
+                }
+                preferencesManager.updateRule(updatedRule)
+                scheduleServiceIfNeeded()
+            }
         }
     }
-}
 
     /**
      * Check if an app should currently be blocked
@@ -185,17 +193,16 @@ class RuleViewModel(
         val currentMinutes = calendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + 
                            calendar.get(java.util.Calendar.MINUTE)
         
-        // Find next rule that will activate
+        // Find next rule that will activate or show remaining time for active SIMPLE rules
         val upcomingRules = _uiState.value.allRules
             .filter { it.enabled }
             .mapNotNull { rule ->
                 when (rule.ruleType) {
                     com.focusr.v2.models.RuleType.SIMPLE -> {
-                        val blockUntil = rule.blockUntilTime ?: return@mapNotNull null
-                        val blockUntilMinutes = blockUntil.first * 60 + blockUntil.second
-                        if (currentMinutes < blockUntilMinutes) {
-                            val minutesUntil = blockUntilMinutes - currentMinutes
-                            Pair(rule, minutesUntil)
+                        // For SIMPLE rules, show remaining time if active
+                        val remaining = rule.getRemainingMinutes()
+                        if (remaining != null && remaining > 0) {
+                            Pair(rule, remaining)
                         } else null
                     }
                     com.focusr.v2.models.RuleType.SCHEDULED -> {
@@ -220,7 +227,11 @@ class RuleViewModel(
                 hours > 0 -> "${hours}h"
                 else -> "${mins}m"
             }
-            "${rule.getDisplayName()} in $timeStr"
+            if (rule.ruleType == com.focusr.v2.models.RuleType.SIMPLE) {
+                "${rule.getDisplayName()} - $timeStr left"
+            } else {
+                "${rule.getDisplayName()} in $timeStr"
+            }
         }
     }
 }

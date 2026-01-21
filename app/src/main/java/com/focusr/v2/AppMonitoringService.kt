@@ -84,28 +84,35 @@ class AppMonitoringService : Service() {
                 blockApp(currentApp)
             }
             
-            // NEW: Stop service if no rules are currently active
-          //  val activeRulesCount = blockingTimeManager.getActiveRulesCount()
-       //     if (activeRulesCount == 0) {
-      //          Log.d("AppMonitoringService", "No active rules, stopping service")
-     //           stopSelf()
-     //           return
-     //       }
+            // Auto-disable expired SIMPLE rules
+            val allRules = preferencesManager.blockingRules.first()
+            val expiredSimpleRules = allRules.filter { rule ->
+                rule.enabled && 
+                rule.ruleType == com.focusr.v2.models.RuleType.SIMPLE &&
+                rule.durationMinutes != null &&
+                rule.activatedAt != null &&
+                System.currentTimeMillis() >= rule.activatedAt + (rule.durationMinutes * 60 * 1000L)
+            }
+            
+            // Disable expired rules
+            expiredSimpleRules.forEach { expiredRule ->
+                Log.d("AppMonitoringService", "Auto-disabling expired SIMPLE rule: ${expiredRule.getDisplayName()}")
+                preferencesManager.updateRule(expiredRule.copy(enabled = false))
+            }
+            
+            // Check if any enabled rules remain
+            val enabledRules = preferencesManager.blockingRules.first().filter { it.enabled }
 
-     // FIXED: Only stop if NO rules exist at all (not just if none are active)
-val allRules = preferencesManager.blockingRules.first()
-val enabledRules = allRules.filter { it.enabled }
+            if (enabledRules.isEmpty()) {
+                Log.d("AppMonitoringService", "No enabled rules exist, stopping service")
+                stopSelf()
+                return
+            }
 
-if (enabledRules.isEmpty()) {
-    Log.d("AppMonitoringService", "No enabled rules exist, stopping service")
-    stopSelf()
-    return
-}
-
-// If we have enabled rules but none are active, keep running
-// (they might become active soon, e.g., SCHEDULED rules)
-val activeRulesCount = blockingTimeManager.getActiveRulesCount()
-Log.d("AppMonitoringService", "Enabled rules: ${enabledRules.size}, Active rules: $activeRulesCount")
+            // If we have enabled rules but none are active, keep running
+            // (they might become active soon, e.g., SCHEDULED rules)
+            val activeRulesCount = blockingTimeManager.getActiveRulesCount()
+            Log.d("AppMonitoringService", "Enabled rules: ${enabledRules.size}, Active rules: $activeRulesCount")
 
         } catch (e: Exception) {
             Log.e("AppMonitoringService", "Error in checkCurrentApp: ${e.message}")

@@ -191,10 +191,12 @@ put("ruleType", rule.ruleType.name)
                 put("enabled", rule.enabled)
                 put("createdAt", rule.createdAt)
                 
-                // SIMPLE rule fields
-                rule.blockUntilTime?.let {
-                    put("blockUntilHour", it.first)
-                    put("blockUntilMinute", it.second)
+                // SIMPLE rule fields (duration-based)
+                rule.durationMinutes?.let {
+                    put("durationMinutes", it)
+                }
+                rule.activatedAt?.let {
+                    put("activatedAt", it)
                 }
                 
                 // SCHEDULED rule fields
@@ -227,10 +229,16 @@ put("ruleType", rule.ruleType.name)
                 
                 val ruleType = RuleType.valueOf(jsonObject.getString("ruleType"))
                 
-                val blockUntilTime = if (jsonObject.has("blockUntilHour")) {
-                    Pair(jsonObject.getInt("blockUntilHour"), jsonObject.getInt("blockUntilMinute"))
+                // SIMPLE rule fields (duration-based)
+                val durationMinutes = if (jsonObject.has("durationMinutes")) {
+                    jsonObject.getInt("durationMinutes")
                 } else null
                 
+                val activatedAt = if (jsonObject.has("activatedAt")) {
+                    jsonObject.getLong("activatedAt")
+                } else null
+                
+                // SCHEDULED rule fields
                 val fromTime = if (jsonObject.has("fromHour")) {
                     Pair(jsonObject.getInt("fromHour"), jsonObject.getInt("fromMinute"))
                 } else null
@@ -248,24 +256,27 @@ put("ruleType", rule.ruleType.name)
                     days
                 } else DayOfWeek.values().toSet()
                 
-                // NEW: Load multi-app fields with backward compatibility
-val name = if (jsonObject.has("name")) {
-    jsonObject.getString("name")
-} else ""
-val packageNames = if (jsonObject.has("packageNames")) {
-    val appsArray = jsonObject.getJSONArray("packageNames")
-    (0 until appsArray.length()).map { appsArray.getString(it) }
-} else if (jsonObject.has("packageName")) {
-    listOf(jsonObject.getString("packageName"))
-} else emptyList()
-val rule = BlockingRule(
-    id = jsonObject.getString("id"),
-    name = name,
-    packageNames = packageNames,
-    ruleType = ruleType,
+                // Load multi-app fields with backward compatibility
+                val name = if (jsonObject.has("name")) {
+                    jsonObject.getString("name")
+                } else ""
+                
+                val packageNames = if (jsonObject.has("packageNames")) {
+                    val appsArray = jsonObject.getJSONArray("packageNames")
+                    (0 until appsArray.length()).map { appsArray.getString(it) }
+                } else if (jsonObject.has("packageName")) {
+                    listOf(jsonObject.getString("packageName"))
+                } else emptyList()
+                
+                val rule = BlockingRule(
+                    id = jsonObject.getString("id"),
+                    name = name,
+                    packageNames = packageNames,
+                    ruleType = ruleType,
                     enabled = jsonObject.getBoolean("enabled"),
                     createdAt = jsonObject.getLong("createdAt"),
-                    blockUntilTime = blockUntilTime,
+                    durationMinutes = durationMinutes,
+                    activatedAt = activatedAt,
                     fromTime = fromTime,
                     toTime = toTime,
                     daysOfWeek = daysOfWeek

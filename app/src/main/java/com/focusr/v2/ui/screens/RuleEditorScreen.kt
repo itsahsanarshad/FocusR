@@ -25,6 +25,18 @@ import com.focusr.v2.models.RuleType
 import com.focusr.v2.navigation.Screen  // ADD THIS
 import com.focusr.v2.ui.viewmodels.RuleViewModel
 import java.util.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -40,9 +52,8 @@ fun RuleEditorScreen(
     var selectedApps by remember { mutableStateOf(setOf<String>()) }
     var showAppPicker by remember { mutableStateOf(false) }
     
-    // SIMPLE rule state
-    var blockUntilHour by remember { mutableStateOf(22) }
-    var blockUntilMinute by remember { mutableStateOf(0) }
+    // SIMPLE rule state (duration-based)
+    var selectedDuration by remember { mutableStateOf(60) } // Default 1 hour
     
     // SCHEDULED rule state
     var fromHour by remember { mutableStateOf(9) }
@@ -69,9 +80,8 @@ fun RuleEditorScreen(
                     
                     when (it.ruleType) {
                         RuleType.SIMPLE -> {
-                            it.blockUntilTime?.let { (h, m) ->
-                                blockUntilHour = h
-                                blockUntilMinute = m
+                            it.durationMinutes?.let { duration ->
+                                selectedDuration = duration
                             }
                         }
                         RuleType.SCHEDULED -> {
@@ -102,244 +112,352 @@ LaunchedEffect(Unit) {
             selectedApps = apps.toSet()
         }
 }
-    
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (ruleId == null) "Add Rule" else "Edit Rule") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    if (ruleId != null) {
-                        IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF1A1A2E),
+                        Color(0xFF16213E),
+                        Color(0xFF0F3460)
+                    ),
+                    radius = 1200f
+                )
+            )
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            if (ruleId == null) "Add Rule" else "Edit Rule",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
                         }
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column( 
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Rule Name Input
-            OutlinedTextField(
-                value = ruleName,
-                onValueChange = { ruleName = it },
-                label = { Text("Rule Name (optional)") },
-                placeholder = { Text("e.g., Social Media Block") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            
-            // App Selection Card
-            Card(
+                    },
+                    actions = {
+                        if (ruleId != null) {
+                            IconButton(onClick = { showDeleteDialog = true }) {
+                                Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFFF6B6B))
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(0xFF2A2A40).copy(alpha = 0.9f),
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
+                )
+            }
+        ) { padding ->
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-            // Navigate to app selection screen
-                        showAppPickerDialog = true  // Show dialog instead of navigating
-        },
-                shape = RoundedCornerShape(12.dp)
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(
+                // Rule Name Input
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF2A2A40).copy(alpha = 0.9f)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    TextField(
+                        value = ruleName,
+                        onValueChange = { ruleName = it },
+                        label = { Text("Rule Name (optional)", color = Color.White.copy(alpha = 0.7f)) },
+                        placeholder = { Text("e.g., Study Mode", color = Color.White.copy(alpha = 0.5f)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF6C63FF),
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = Color(0xFF6C63FF)
+                        )
+                    )
+                }
+
+                // App Selection Card
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .clickable {
+                            showAppPickerDialog = true
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF2A2A40).copy(alpha = 0.9f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Apps,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Target Apps",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (selectedApps.isEmpty())
+                                    "Tap to select apps"
+                                else
+                                    "${selectedApps.size} app(s) selected",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Show selected apps as chips
+                if (selectedApps.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        selectedApps.forEach { pkgName ->
+                            val app = availableApps.find { it.packageName == pkgName }
+                            AssistChip(
+                                onClick = { selectedApps = selectedApps - pkgName },
+                                label = { Text(app?.appName ?: pkgName) },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Enable/Disable toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Apps,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                    Text("Rule Enabled",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Target Apps",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = if (selectedApps.isEmpty()) 
-                                "Tap to select apps" 
-                            else 
-                                "${selectedApps.size} app(s) selected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { enabled = it }
                     )
                 }
-            }
-            
-            // Show selected apps as chips
-            if (selectedApps.isNotEmpty()) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+
+                HorizontalDivider()
+
+                // Rule Type Selector
+                Text(
+                    text = "Rule Type",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Scalable rule type selector
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    selectedApps.forEach { pkgName ->
-                        val app = availableApps.find { it.packageName == pkgName }
-                        AssistChip(
-                            onClick = { selectedApps = selectedApps - pkgName },
-                            label = { Text(app?.appName ?: pkgName) },
-                            trailingIcon = {
+                    items(RuleType.entries.size) { index ->
+                        val type = RuleType.entries[index]
+                        val isSelected = ruleType == type
+                        Card(
+                            onClick = { ruleType = type },
+                            modifier = Modifier
+                                .width(150.dp)
+                                .height(80.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected)
+                                    Color(0xFF6C63FF)
+                                else
+                                    Color(0xFF2A2A40).copy(alpha = 0.6f)
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            border = if (isSelected)
+                                BorderStroke(2.dp, Color(0xFF6C63FF).copy(alpha = 0.5f))
+                            else null
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Remove",
-                                    modifier = Modifier.size(16.dp)
+                                    imageVector = when (type) {
+                                        RuleType.SIMPLE -> Icons.Outlined.Schedule
+                                        RuleType.SCHEDULED -> Icons.Outlined.CalendarMonth
+                                    },
+                                    contentDescription = null,
+                                    tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = when (type) {
+                                        RuleType.SIMPLE -> "Simple"
+                                        RuleType.SCHEDULED -> "Scheduled"
+                                    },
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = Color.White,
+                                    fontSize = 14.sp
                                 )
                             }
-                        )
-                    }
-                }
-            }
-            
-            // Enable/Disable toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Rule Enabled")
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { enabled = it }
-                )
-            }
-            
-            HorizontalDivider()
-            
-            // Rule Type Selector
-            Text(
-                text = "Rule Type",
-                style = MaterialTheme.typography.titleSmall
-            )
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = ruleType == RuleType.SIMPLE,
-                    onClick = { ruleType = RuleType.SIMPLE },
-                    label = { Text("Simple") },
-                    modifier = Modifier.weight(1f)
-                )
-                FilterChip(
-                    selected = ruleType == RuleType.SCHEDULED,
-                    onClick = { ruleType = RuleType.SCHEDULED },
-                    label = { Text("Scheduled") },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            
-            Text(
-                text = when (ruleType) {
-                    RuleType.SIMPLE -> "Block until a specific time today"
-                    RuleType.SCHEDULED -> "Block during specific hours on selected days"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            HorizontalDivider()
-            
-            // Rule Configuration based on type
-            when (ruleType) {
-                RuleType.SIMPLE -> {
-                    SimpleRuleConfig(
-                        hour = blockUntilHour,
-                        minute = blockUntilMinute,
-                        onTimeChange = { h, m ->
-                            blockUntilHour = h
-                            blockUntilMinute = m
                         }
-                    )
-                }
-                RuleType.SCHEDULED -> {
-                    ScheduledRuleConfig(
-                        fromHour = fromHour,
-                        fromMinute = fromMinute,
-                        toHour = toHour,
-                        toMinute = toMinute,
-                        selectedDays = selectedDays,
-                        onFromTimeChange = { h, m ->
-                            fromHour = h
-                            fromMinute = m
-                        },
-                        onToTimeChange = { h, m ->
-                            toHour = h
-                            toMinute = m
-                        },
-                        onDaysChange = { selectedDays = it }
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Save Button
-            Button(
-                onClick = {
-                    val rule = when (ruleType) {
-                        RuleType.SIMPLE -> BlockingRule(
-                            id = ruleId ?: UUID.randomUUID().toString(),
-                            name = ruleName,
-                            packageNames = selectedApps.toList(),
-                            ruleType = RuleType.SIMPLE,
-                            enabled = enabled,
-                            blockUntilTime = Pair(blockUntilHour, blockUntilMinute)
-                        )
-                        RuleType.SCHEDULED -> BlockingRule(
-                            id = ruleId ?: UUID.randomUUID().toString(),
-                            name = ruleName,
-                            packageNames = selectedApps.toList(),
-                            ruleType = RuleType.SCHEDULED,
-                            enabled = enabled,
-                            fromTime = Pair(fromHour, fromMinute),
-                            toTime = Pair(toHour, toMinute),
-                            daysOfWeek = selectedDays
-                        )
                     }
-                    
-                    if (ruleId == null) {
-                        ruleViewModel.addRule(rule)
-                    } else {
-                        ruleViewModel.updateRule(rule)
-                    }
-                    
-                    navController.popBackStack()
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = selectedApps.isNotEmpty()
-            ) {
-                Text(if (ruleId == null) "Add Rule" else "Save Changes")
-            }
-            
-            // Validation message
-            if (selectedApps.isEmpty()) {
-                Text(
-                    text = "Please select at least one app",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
+                }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = when (ruleType) {
+                        RuleType.SIMPLE -> "Block for a selected duration"
+                        RuleType.SCHEDULED -> "Block during specific hours on selected days"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+
+                HorizontalDivider()
+
+                // Rule Configuration based on type
+                when (ruleType) {
+                    RuleType.SIMPLE -> {
+                        DurationRuleConfig(
+                            selectedDuration = selectedDuration,
+                            onDurationChange = { selectedDuration = it }
+                        )
+                    }
+
+                    RuleType.SCHEDULED -> {
+                        ScheduledRuleConfig(
+                            fromHour = fromHour,
+                            fromMinute = fromMinute,
+                            toHour = toHour,
+                            toMinute = toMinute,
+                            selectedDays = selectedDays,
+                            onFromTimeChange = { h, m ->
+                                fromHour = h
+                                fromMinute = m
+                            },
+                            onToTimeChange = { h, m ->
+                                toHour = h
+                                toMinute = m
+                            },
+                            onDaysChange = { selectedDays = it }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Save Button
+                Button(
+                    onClick = {
+                        val rule = when (ruleType) {
+                            RuleType.SIMPLE -> BlockingRule(
+                                id = ruleId ?: UUID.randomUUID().toString(),
+                                name = ruleName,
+                                packageNames = selectedApps.toList(),
+                                ruleType = RuleType.SIMPLE,
+                                enabled = enabled,
+                                durationMinutes = selectedDuration,
+                                activatedAt = System.currentTimeMillis()
+                            )
+
+                            RuleType.SCHEDULED -> BlockingRule(
+                                id = ruleId ?: UUID.randomUUID().toString(),
+                                name = ruleName,
+                                packageNames = selectedApps.toList(),
+                                ruleType = RuleType.SCHEDULED,
+                                enabled = enabled,
+                                fromTime = Pair(fromHour, fromMinute),
+                                toTime = Pair(toHour, toMinute),
+                                daysOfWeek = selectedDays
+                            )
+                        }
+
+                        if (ruleId == null) {
+                            ruleViewModel.addRule(rule)
+                        } else {
+                            ruleViewModel.updateRule(rule)
+                        }
+
+                        navController.popBackStack()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    enabled = selectedApps.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF6C63FF),
+                        disabledContainerColor = Color(0xFF2A2A40).copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(
+                        imageVector = if (ruleId == null) Icons.Default.Add else Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (ruleId == null) "Add Rule" else "Save Changes",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                // Validation message
+                if (selectedApps.isEmpty()) {
+                    Text(
+                        text = "Please select at least one app",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+        }
     }
 
     // App Picker Dialog
@@ -500,28 +618,76 @@ fun AppPickerDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SimpleRuleConfig(
-    hour: Int,
-    minute: Int,
-    onTimeChange: (Int, Int) -> Unit
+fun DurationRuleConfig(
+    selectedDuration: Int,
+    onDurationChange: (Int) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Preset durations in minutes
+    val durations = listOf(
+        15 to "15m",
+        30 to "30m",
+        60 to "1h",
+        120 to "2h",
+        180 to "3h",
+        240 to "4h",
+        360 to "6h",
+        480 to "8h"
+    )
+    
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = "Block Until",
-            style = MaterialTheme.typography.titleSmall
+            text = "Block Duration",
+            style = MaterialTheme.typography.titleSmall,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold
         )
         
-        TimePickerRow(
-            hour = hour,
-            minute = minute,
-            onTimeChange = onTimeChange
-        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            durations.forEach { (minutes, label) ->
+                val isSelected = selectedDuration == minutes
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onDurationChange(minutes) },
+                    label = { 
+                        Text(
+                            label,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        ) 
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF6C63FF),
+                        selectedLabelColor = Color.White,
+                        containerColor = Color(0xFF2A2A40),
+                        labelColor = Color.White.copy(alpha = 0.8f)
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderColor = Color.White.copy(alpha = 0.3f),
+                        selectedBorderColor = Color(0xFF6C63FF),
+                        enabled = true,
+                        selected = isSelected
+                    )
+                )
+            }
+        }
+        
+        // Show selected duration description
+        val durationText = when {
+            selectedDuration < 60 -> "${selectedDuration} minutes"
+            selectedDuration == 60 -> "1 hour"
+            selectedDuration % 60 == 0 -> "${selectedDuration / 60} hours"
+            else -> "${selectedDuration / 60}h ${selectedDuration % 60}m"
+        }
         
         Text(
-            text = "Apps will be blocked until ${formatTimeDisplay(hour, minute)} today",
+            text = "Blocking will last for $durationText from when the rule is saved",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White.copy(alpha = 0.6f)
         )
     }
 }
@@ -539,17 +705,21 @@ fun ScheduledRuleConfig(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = "From", style = MaterialTheme.typography.titleSmall)
+            Text(text = "From", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+
             TimePickerRow(hour = fromHour, minute = fromMinute, onTimeChange = onFromTimeChange)
         }
         
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = "To", style = MaterialTheme.typography.titleSmall)
+            Text(text = "To", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TimePickerRow(hour = toHour, minute = toMinute, onTimeChange = onToTimeChange)
         }
         
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = "Days of Week", style = MaterialTheme.typography.titleSmall)
+            Text(text = "Days of Week", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Spacer(modifier = Modifier.height(8.dp))
             DaysOfWeekSelector(selectedDays = selectedDays, onDaysChange = onDaysChange)
         }
     }
@@ -561,42 +731,58 @@ fun TimePickerRow(
     minute: Int,
     onTimeChange: (Int, Int) -> Unit
 ) {
+    var hourText by remember { mutableStateOf(hour.toString()) }
+    var minuteText by remember { mutableStateOf(minute.toString().padStart(2, '0')) }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+
+        // HOUR
         OutlinedTextField(
-            value = hour.toString(),
-            onValueChange = { 
-                it.toIntOrNull()?.let { h ->
-                    if (h in 0..23) onTimeChange(h, minute)
+            value = hourText,
+            onValueChange = { newValue ->
+                hourText = newValue.filter { it.isDigit() }     // allow delete
+
+                val h = hourText.toIntOrNull()
+                if (h != null && h in 0..23) {
+                    onTimeChange(h, minute)
                 }
             },
             label = { Text("Hour") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.weight(1f)
         )
-        
+
         Text(":", style = MaterialTheme.typography.headlineMedium)
-        
+
+        // MINUTE
         OutlinedTextField(
-            value = minute.toString().padStart(2, '0'),
-            onValueChange = {
-                it.toIntOrNull()?.let { m ->
-                    if (m in 0..59) onTimeChange(hour, m)
+            value = minuteText,
+            onValueChange = { newValue ->
+                minuteText = newValue.filter { it.isDigit() }
+
+                val m = minuteText.toIntOrNull()
+                if (m != null && m in 0..59) {
+                    onTimeChange(hour, m)
                 }
             },
             label = { Text("Minute") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.weight(1f)
         )
-        
+
         Text(
             text = formatTimeDisplay(hour, minute),
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 8.dp)
         )
     }
 }
+
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

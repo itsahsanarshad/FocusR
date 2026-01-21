@@ -57,17 +57,14 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
     }
     
     /**
-     * Check if a SIMPLE rule is active (block until time today)
+     * Check if a SIMPLE rule is active (duration-based)
      */
     private fun checkSimpleRule(rule: com.focusr.v2.models.BlockingRule): Boolean {
-        val blockUntilTime = rule.blockUntilTime ?: return false
+        val durationMinutes = rule.durationMinutes ?: return false
+        val activatedAt = rule.activatedAt ?: return false
         
-        val calendar = Calendar.getInstance()
-        val currentMinutes = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
-        val blockUntilMinutes = blockUntilTime.first * 60 + blockUntilTime.second
-        
-        // Block if current time is before the "block until" time
-        return currentMinutes <= blockUntilMinutes
+        val expiresAt = activatedAt + (durationMinutes * 60 * 1000L)
+        return System.currentTimeMillis() < expiresAt
     }
     
     /**
