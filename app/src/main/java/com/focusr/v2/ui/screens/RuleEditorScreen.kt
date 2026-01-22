@@ -31,6 +31,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyRow
@@ -61,6 +62,16 @@ fun RuleEditorScreen(
     var toHour by remember { mutableStateOf(17) }
     var toMinute by remember { mutableStateOf(0) }
     var selectedDays by remember { mutableStateOf(DayOfWeek.values().toSet()) }
+    
+    // MENTAL_CLARITY rule state
+    var windDownHour by remember { mutableStateOf(21) }  // 9 PM default
+    var windDownMinute by remember { mutableStateOf(0) }
+    var windDownEnabled by remember { mutableStateOf(true) }
+    var morningBlockDuration by remember { mutableStateOf(120) }  // 2 hours default
+    var morningFuryEnabled by remember { mutableStateOf(true) }
+    var sleepDetectionMinutes by remember { mutableStateOf(300) }  // 5 hours default
+    var morningWindowStart by remember { mutableStateOf(4) }  // 4 AM
+    var morningWindowEnd by remember { mutableStateOf(12) }  // 12 PM
     
     var showDeleteDialog by remember { mutableStateOf(false) }
     var existingRule by remember { mutableStateOf<BlockingRule?>(null) }
@@ -93,6 +104,21 @@ fun RuleEditorScreen(
                                 toHour = h
                                 toMinute = m
                             }
+                            selectedDays = it.daysOfWeek
+                        }
+                        RuleType.MENTAL_CLARITY -> {
+                            it.windDownTime?.let { (h, m) ->
+                                windDownHour = h
+                                windDownMinute = m
+                            }
+                            windDownEnabled = it.windDownEnabled
+                            it.morningBlockDuration?.let { duration ->
+                                morningBlockDuration = duration
+                            }
+                            morningFuryEnabled = it.morningFuryEnabled
+                            sleepDetectionMinutes = it.sleepDetectionMinutes
+                            morningWindowStart = it.morningWindowStart
+                            morningWindowEnd = it.morningWindowEnd
                             selectedDays = it.daysOfWeek
                         }
                     }
@@ -326,6 +352,7 @@ LaunchedEffect(Unit) {
                                     imageVector = when (type) {
                                         RuleType.SIMPLE -> Icons.Outlined.Schedule
                                         RuleType.SCHEDULED -> Icons.Outlined.CalendarMonth
+                                        RuleType.MENTAL_CLARITY -> Icons.Outlined.Bedtime
                                     },
                                     contentDescription = null,
                                     tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
@@ -336,6 +363,7 @@ LaunchedEffect(Unit) {
                                     text = when (type) {
                                         RuleType.SIMPLE -> "Simple"
                                         RuleType.SCHEDULED -> "Scheduled"
+                                        RuleType.MENTAL_CLARITY -> "Mental Clarity"
                                     },
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     color = Color.White,
@@ -352,6 +380,7 @@ LaunchedEffect(Unit) {
                     text = when (ruleType) {
                         RuleType.SIMPLE -> "Block for a selected duration"
                         RuleType.SCHEDULED -> "Block during specific hours on selected days"
+                        RuleType.MENTAL_CLARITY -> "Smart blocking: wind-down at night & morning focus"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f)
@@ -386,6 +415,33 @@ LaunchedEffect(Unit) {
                             onDaysChange = { selectedDays = it }
                         )
                     }
+                    
+                    RuleType.MENTAL_CLARITY -> {
+                        MentalClarityRuleConfig(
+                            windDownHour = windDownHour,
+                            windDownMinute = windDownMinute,
+                            windDownEnabled = windDownEnabled,
+                            morningBlockDuration = morningBlockDuration,
+                            morningFuryEnabled = morningFuryEnabled,
+                            sleepDetectionMinutes = sleepDetectionMinutes,
+                            morningWindowStart = morningWindowStart,
+                            morningWindowEnd = morningWindowEnd,
+                            selectedDays = selectedDays,
+                            onWindDownTimeChange = { h, m ->
+                                windDownHour = h
+                                windDownMinute = m
+                            },
+                            onWindDownEnabledChange = { windDownEnabled = it },
+                            onMorningDurationChange = { morningBlockDuration = it },
+                            onMorningFuryEnabledChange = { morningFuryEnabled = it },
+                            onSleepDetectionChange = { sleepDetectionMinutes = it },
+                            onMorningWindowChange = { start, end ->
+                                morningWindowStart = start
+                                morningWindowEnd = end
+                            },
+                            onDaysChange = { selectedDays = it }
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -412,6 +468,22 @@ LaunchedEffect(Unit) {
                                 enabled = enabled,
                                 fromTime = Pair(fromHour, fromMinute),
                                 toTime = Pair(toHour, toMinute),
+                                daysOfWeek = selectedDays
+                            )
+                            
+                            RuleType.MENTAL_CLARITY -> BlockingRule(
+                                id = ruleId ?: UUID.randomUUID().toString(),
+                                name = ruleName.ifEmpty { "Mental Clarity" },
+                                packageNames = selectedApps.toList(),
+                                ruleType = RuleType.MENTAL_CLARITY,
+                                enabled = enabled,
+                                windDownTime = Pair(windDownHour, windDownMinute),
+                                windDownEnabled = windDownEnabled,
+                                morningBlockDuration = morningBlockDuration,
+                                morningFuryEnabled = morningFuryEnabled,
+                                sleepDetectionMinutes = sleepDetectionMinutes,
+                                morningWindowStart = morningWindowStart,
+                                morningWindowEnd = morningWindowEnd,
                                 daysOfWeek = selectedDays
                             )
                         }
@@ -837,4 +909,281 @@ private fun formatTimeDisplay(hour: Int, minute: Int): String {
         else -> hour
     }
     return String.format("%d:%02d %s", displayHour, minute, period)
+}
+
+/**
+ * Configuration UI for Mental Clarity rules (wind-down + morning focus)
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun MentalClarityRuleConfig(
+    windDownHour: Int,
+    windDownMinute: Int,
+    windDownEnabled: Boolean,
+    morningBlockDuration: Int,
+    morningFuryEnabled: Boolean,
+    sleepDetectionMinutes: Int,
+    morningWindowStart: Int,
+    morningWindowEnd: Int,
+    selectedDays: Set<DayOfWeek>,
+    onWindDownTimeChange: (Int, Int) -> Unit,
+    onWindDownEnabledChange: (Boolean) -> Unit,
+    onMorningDurationChange: (Int) -> Unit,
+    onMorningFuryEnabledChange: (Boolean) -> Unit,
+    onSleepDetectionChange: (Int) -> Unit,
+    onMorningWindowChange: (Int, Int) -> Unit,
+    onDaysChange: (Set<DayOfWeek>) -> Unit
+) {
+    var showWindDownTimePicker by remember { mutableStateOf(false) }
+    
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Wind-down Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.6f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🌙",
+                            fontSize = 20.sp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Wind Down",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Switch(
+                        checked = windDownEnabled,
+                        onCheckedChange = onWindDownEnabledChange
+                    )
+                }
+                
+                if (windDownEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Block apps after this time",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { showWindDownTimePicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Schedule, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(formatTimeDisplay(windDownHour, windDownMinute))
+                    }
+                }
+            }
+        }
+        
+        // Morning Fury Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.6f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "☀️",
+                            fontSize = 20.sp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Morning Focus",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Switch(
+                        checked = morningFuryEnabled,
+                        onCheckedChange = onMorningFuryEnabledChange
+                    )
+                }
+                
+                if (morningFuryEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Block apps for how long after waking up?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Duration presets
+                    val durations = listOf(
+                        30 to "30m",
+                        60 to "1h",
+                        90 to "1.5h",
+                        120 to "2h",
+                        180 to "3h"
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        durations.forEach { (minutes, label) ->
+                            FilterChip(
+                                selected = morningBlockDuration == minutes,
+                                onClick = { onMorningDurationChange(minutes) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Sleep Detection Settings
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.6f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "😴",
+                        fontSize = 20.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Sleep Detection",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Consider it sleep if no phone usage for:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                val sleepThresholds = listOf(
+                    180 to "3h",
+                    240 to "4h",
+                    300 to "5h",
+                    360 to "6h"
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    sleepThresholds.forEach { (minutes, label) ->
+                        FilterChip(
+                            selected = sleepDetectionMinutes == minutes,
+                            onClick = { onSleepDetectionChange(minutes) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Detect wake-up between:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Start hour
+                    val startHours = listOf(3, 4, 5, 6)
+                    startHours.forEach { hour ->
+                        FilterChip(
+                            selected = morningWindowStart == hour,
+                            onClick = { onMorningWindowChange(hour, morningWindowEnd) },
+                            label = { Text("${hour}AM") }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // End hour
+                    val endHours = listOf(10, 11, 12)
+                    endHours.forEach { hour ->
+                        FilterChip(
+                            selected = morningWindowEnd == hour,
+                            onClick = { onMorningWindowChange(morningWindowStart, hour) },
+                            label = { Text(if (hour == 12) "12PM" else "${hour}AM") }
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Days Selection
+        Text(
+            text = "Active Days",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+        DaysOfWeekSelector(
+            selectedDays = selectedDays,
+            onDaysChange = onDaysChange
+        )
+    }
+    
+    // Wind-down time picker dialog
+    if (showWindDownTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = windDownHour,
+            initialMinute = windDownMinute
+        )
+        AlertDialog(
+            onDismissRequest = { showWindDownTimePicker = false },
+            title = { Text("Wind Down Time") },
+            text = {
+                TimePicker(state = timePickerState)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onWindDownTimeChange(timePickerState.hour, timePickerState.minute)
+                    showWindDownTimePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWindDownTimePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }

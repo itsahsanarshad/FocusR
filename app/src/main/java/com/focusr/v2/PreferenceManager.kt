@@ -213,6 +213,23 @@ put("ruleType", rule.ruleType.name)
                 val daysArray = JSONArray()
                 rule.daysOfWeek.forEach { day -> daysArray.put(day.name) }
                 put("daysOfWeek", daysArray)
+                
+                // MENTAL_CLARITY rule fields
+                rule.windDownTime?.let {
+                    put("windDownHour", it.first)
+                    put("windDownMinute", it.second)
+                }
+                put("windDownEnabled", rule.windDownEnabled)
+                rule.morningBlockDuration?.let {
+                    put("morningBlockDuration", it)
+                }
+                put("morningFuryEnabled", rule.morningFuryEnabled)
+                put("sleepDetectionMinutes", rule.sleepDetectionMinutes)
+                put("morningWindowStart", rule.morningWindowStart)
+                put("morningWindowEnd", rule.morningWindowEnd)
+                rule.wakeUpDetectedAt?.let {
+                    put("wakeUpDetectedAt", it)
+                }
             }
             jsonArray.put(jsonObject)
         }
@@ -279,7 +296,22 @@ put("ruleType", rule.ruleType.name)
                     activatedAt = activatedAt,
                     fromTime = fromTime,
                     toTime = toTime,
-                    daysOfWeek = daysOfWeek
+                    daysOfWeek = daysOfWeek,
+                    // MENTAL_CLARITY fields
+                    windDownTime = if (jsonObject.has("windDownHour")) {
+                        Pair(jsonObject.getInt("windDownHour"), jsonObject.getInt("windDownMinute"))
+                    } else null,
+                    windDownEnabled = jsonObject.optBoolean("windDownEnabled", true),
+                    morningBlockDuration = if (jsonObject.has("morningBlockDuration")) {
+                        jsonObject.getInt("morningBlockDuration")
+                    } else null,
+                    morningFuryEnabled = jsonObject.optBoolean("morningFuryEnabled", true),
+                    sleepDetectionMinutes = jsonObject.optInt("sleepDetectionMinutes", 300),
+                    morningWindowStart = jsonObject.optInt("morningWindowStart", 4),
+                    morningWindowEnd = jsonObject.optInt("morningWindowEnd", 12),
+                    wakeUpDetectedAt = if (jsonObject.has("wakeUpDetectedAt")) {
+                        jsonObject.getLong("wakeUpDetectedAt")
+                    } else null
                 )
                 
                 rules.add(rule)

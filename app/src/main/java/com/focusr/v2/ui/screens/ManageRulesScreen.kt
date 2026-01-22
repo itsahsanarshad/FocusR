@@ -174,6 +174,7 @@ fun RuleCard(
     val accentColor = when (rule.ruleType) {
         RuleType.SIMPLE -> Color(0xFFFFB84D)  // Orange for SIMPLE
         RuleType.SCHEDULED -> Color(0xFF6C63FF)  // Purple for SCHEDULED
+        RuleType.MENTAL_CLARITY -> Color(0xFF4ECDC4)  // Teal for MENTAL_CLARITY
     }
     
     Card(
@@ -203,10 +204,10 @@ fun RuleCard(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = if (rule.ruleType == RuleType.SIMPLE) {
-                                Icons.Outlined.Schedule
-                            } else {
-                                Icons.Outlined.CalendarMonth
+                            imageVector = when (rule.ruleType) {
+                                RuleType.SIMPLE -> Icons.Outlined.Schedule
+                                RuleType.SCHEDULED -> Icons.Outlined.CalendarMonth
+                                RuleType.MENTAL_CLARITY -> Icons.Outlined.Bedtime
                             },
                             contentDescription = null,
                             tint = accentColor,

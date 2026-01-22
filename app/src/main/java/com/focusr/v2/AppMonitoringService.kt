@@ -22,6 +22,7 @@ class AppMonitoringService : Service() {
     private var monitoringRunnable: Runnable? = null
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var blockingTimeManager: BlockingTimeManager
+    private lateinit var sleepDetectionManager: SleepDetectionManager
     private val notificationHandler = Handler(Looper.getMainLooper())
     private var notificationRunnable: Runnable? = null
     private var lastDetectedApp: String? = null
@@ -35,6 +36,7 @@ class AppMonitoringService : Service() {
         super.onCreate()
         preferencesManager = PreferencesManager(this)
         blockingTimeManager = BlockingTimeManager(preferencesManager)
+        sleepDetectionManager = SleepDetectionManager(this)
         createNotificationChannel()
         
         // Perform migration on service creation
@@ -98,6 +100,45 @@ class AppMonitoringService : Service() {
             expiredSimpleRules.forEach { expiredRule ->
                 Log.d("AppMonitoringService", "Auto-disabling expired SIMPLE rule: ${expiredRule.getDisplayName()}")
                 preferencesManager.updateRule(expiredRule.copy(enabled = false))
+            }
+            
+            // Check for wake-up detection for Mental Clarity rules
+            val mentalClarityRules = allRules.filter { rule ->
+                rule.enabled &&
+                rule.ruleType == com.focusr.v2.models.RuleType.MENTAL_CLARITY &&
+                rule.morningFuryEnabled &&
+                rule.wakeUpDetectedAt == null  // Not yet detected
+            }
+            
+            mentalClarityRules.forEach { rule ->
+                // Check if we're in the morning window
+                if (sleepDetectionManager.isInMorningWindow(rule.morningWindowStart, rule.morningWindowEnd)) {
+                    // Try to detect wake-up
+                    val wakeUpTime = sleepDetectionManager.detectWakeUp(
+                        rule.sleepDetectionMinutes,
+                        rule.morningWindowStart,
+                        rule.morningWindowEnd
+                    )
+                    if (wakeUpTime != null) {
+                        Log.d("AppMonitoringService", "Wake-up detected for Mental Clarity rule: ${rule.getDisplayName()}")
+                        preferencesManager.updateRule(rule.copy(wakeUpDetectedAt = wakeUpTime))
+                    }
+                }
+            }
+            
+            // Auto-clear expired Mental Clarity morning blocks and reset for next day
+            val expiredMentalClarityRules = allRules.filter { rule ->
+                rule.enabled &&
+                rule.ruleType == com.focusr.v2.models.RuleType.MENTAL_CLARITY &&
+                rule.wakeUpDetectedAt != null &&
+                rule.morningBlockDuration != null &&
+                System.currentTimeMillis() >= rule.wakeUpDetectedAt + (rule.morningBlockDuration * 60 * 1000L)
+            }
+            
+            expiredMentalClarityRules.forEach { rule ->
+                Log.d("AppMonitoringService", "Resetting Mental Clarity rule for next day: ${rule.getDisplayName()}")
+                // Reset wakeUpDetectedAt so it can detect again tomorrow
+                preferencesManager.updateRule(rule.copy(wakeUpDetectedAt = null))
             }
             
             // Check if any enabled rules remain

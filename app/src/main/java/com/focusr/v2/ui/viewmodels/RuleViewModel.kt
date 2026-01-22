@@ -215,6 +215,18 @@ class RuleViewModel(
                         }
                         Pair(rule, minutesUntil)
                     }
+                    com.focusr.v2.models.RuleType.MENTAL_CLARITY -> {
+                        // For Mental Clarity, show morning block remaining if active
+                        val wakeUp = rule.wakeUpDetectedAt
+                        val duration = rule.morningBlockDuration
+                        if (wakeUp != null && duration != null) {
+                            val expiresAt = wakeUp + (duration * 60 * 1000L)
+                            val remaining = ((expiresAt - now) / 1000 / 60).toInt()
+                            if (remaining > 0) {
+                                Pair(rule, remaining)
+                            } else null
+                        } else null
+                    }
                 }
             }
             .minByOrNull { it.second }

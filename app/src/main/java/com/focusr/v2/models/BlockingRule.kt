@@ -34,7 +34,17 @@ data class BlockingRule(
     // For SCHEDULED rules - recurring schedule
     val fromTime: Pair<Int, Int>? = null,  // (hour, minute)
     val toTime: Pair<Int, Int>? = null,    // (hour, minute)
-    val daysOfWeek: Set<DayOfWeek> = DayOfWeek.values().toSet()  // Default: all days
+    val daysOfWeek: Set<DayOfWeek> = DayOfWeek.values().toSet(),  // Default: all days
+    
+    // For MENTAL_CLARITY rules - smart sleep-aware blocking
+    val windDownTime: Pair<Int, Int>? = null,    // Wind-down start time (hour, minute)
+    val windDownEnabled: Boolean = true,          // Toggle wind-down phase
+    val morningBlockDuration: Int? = null,        // Morning block duration in minutes
+    val morningFuryEnabled: Boolean = true,       // Toggle morning blocking phase
+    val sleepDetectionMinutes: Int = 300,         // No usage for X minutes = sleep (default 5 hours)
+    val morningWindowStart: Int = 4,              // Morning detection window start hour (default 4 AM)
+    val morningWindowEnd: Int = 12,               // Morning detection window end hour (default 12 PM)
+    val wakeUpDetectedAt: Long? = null            // Timestamp when wake-up was detected
 ) {
     /**
      * Gets the actual package names, handling backward compatibility
@@ -62,11 +72,12 @@ data class BlockingRule(
     }
     
     /**
-     * Gets the priority based on rule type (SIMPLE=1, SCHEDULED=2)
+     * Gets the priority based on rule type (SIMPLE=1, SCHEDULED=2, MENTAL_CLARITY=3)
      */
     fun calculatePriority(): Int = when (ruleType) {
         RuleType.SIMPLE -> 1
         RuleType.SCHEDULED -> 2
+        RuleType.MENTAL_CLARITY -> 3
     }
     
     /**
@@ -77,6 +88,12 @@ data class BlockingRule(
         val hasValidTimes = when (ruleType) {
             RuleType.SIMPLE -> durationMinutes != null && durationMinutes > 0
             RuleType.SCHEDULED -> fromTime != null && toTime != null
+            RuleType.MENTAL_CLARITY -> {
+                // Must have either wind-down or morning fury enabled with valid settings
+                val hasWindDown = windDownEnabled && windDownTime != null
+                val hasMorningFury = morningFuryEnabled && morningBlockDuration != null && morningBlockDuration > 0
+                hasWindDown || hasMorningFury
+            }
         }
         return hasApps && hasValidTimes
     }
@@ -105,6 +122,16 @@ data class BlockingRule(
                 val (toH, toM) = toTime ?: return "Invalid rule"
                 val daysText = if (daysOfWeek.size == 7) "Daily" else daysOfWeek.joinToString(", ") { it.shortName }
                 "${formatTime(fromH, fromM)} - ${formatTime(toH, toM)} ($daysText)"
+            }
+            RuleType.MENTAL_CLARITY -> {
+                val parts = mutableListOf<String>()
+                if (windDownEnabled && windDownTime != null) {
+                    parts.add("Wind-down: ${formatTime(windDownTime.first, windDownTime.second)}")
+                }
+                if (morningFuryEnabled && morningBlockDuration != null) {
+                    parts.add("Morning: ${formatDuration(morningBlockDuration)}")
+                }
+                if (parts.isEmpty()) "Not configured" else parts.joinToString(" • ")
             }
         }
     }
@@ -156,8 +183,9 @@ data class BlockingRule(
  * Types of blocking rules
  */
 enum class RuleType {
-    SIMPLE,     // Block until specific time (same day) - Priority 1
-    SCHEDULED   // Recurring schedule with days of week - Priority 2
+    SIMPLE,         // Block for duration - Priority 1
+    SCHEDULED,      // Recurring schedule with days of week - Priority 2
+    MENTAL_CLARITY  // Smart sleep-aware blocking (wind-down + morning) - Priority 3
 }
 
 /**

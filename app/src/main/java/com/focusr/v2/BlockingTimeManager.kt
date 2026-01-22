@@ -53,6 +53,7 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
         return when (rule.ruleType) {
             com.focusr.v2.models.RuleType.SIMPLE -> checkSimpleRule(rule)
             com.focusr.v2.models.RuleType.SCHEDULED -> checkScheduledRule(rule)
+            com.focusr.v2.models.RuleType.MENTAL_CLARITY -> checkMentalClarityRule(rule)
         }
     }
     
@@ -93,6 +94,53 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
             // Same-day schedule (e.g., 9 AM to 5 PM)
             currentMinutes in fromMinutes..toMinutes
         }
+    }
+    
+    /**
+     * Check if a MENTAL_CLARITY rule is active.
+     * This rule has two phases:
+     * 1. Wind-down: After set time, blocks apps until next morning
+     * 2. Morning Fury: After wake-up detected, blocks apps for set duration
+     */
+    private fun checkMentalClarityRule(rule: com.focusr.v2.models.BlockingRule): Boolean {
+        val calendar = Calendar.getInstance()
+        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
+        val currentMinutes = currentHour * 60 + calendar.get(Calendar.MINUTE)
+        val now = System.currentTimeMillis()
+        
+        // Check if today is in the rule's active days
+        val currentDay = com.focusr.v2.models.DayOfWeek.getCurrentDay()
+        if (!rule.daysOfWeek.contains(currentDay)) {
+            return false
+        }
+        
+        // Phase 1: Wind-down check
+        if (rule.windDownEnabled && rule.windDownTime != null) {
+            val windDownMinutes = rule.windDownTime.first * 60 + rule.windDownTime.second
+            val morningWindowEnd = rule.morningWindowEnd
+            
+            // Active from wind-down time until morning window starts
+            // e.g., 9 PM until 4 AM next day
+            if (currentMinutes >= windDownMinutes || currentHour < rule.morningWindowStart) {
+                Log.d("BlockingTimeManager", "Mental Clarity: Wind-down phase active")
+                return true
+            }
+        }
+        
+        // Phase 2: Morning Fury check
+        if (rule.morningFuryEnabled && rule.morningBlockDuration != null) {
+            // Check if wake-up was detected and we're still in the blocking window
+            val wakeUpAt = rule.wakeUpDetectedAt
+            if (wakeUpAt != null) {
+                val expiresAt = wakeUpAt + (rule.morningBlockDuration * 60 * 1000L)
+                if (now < expiresAt) {
+                    Log.d("BlockingTimeManager", "Mental Clarity: Morning Fury phase active")
+                    return true
+                }
+            }
+        }
+        
+        return false
     }
     
     /**
