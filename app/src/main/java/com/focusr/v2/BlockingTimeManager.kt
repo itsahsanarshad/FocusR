@@ -54,6 +54,11 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
             com.focusr.v2.models.RuleType.SIMPLE -> checkSimpleRule(rule)
             com.focusr.v2.models.RuleType.SCHEDULED -> checkScheduledRule(rule)
             com.focusr.v2.models.RuleType.MENTAL_CLARITY -> checkMentalClarityRule(rule)
+            com.focusr.v2.models.RuleType.SMART_COOLDOWN -> {
+                // Smart Cooldown blocking is handled dynamically by AppMonitoringService.handleSmartCooldown()
+                // shouldBlockApp() should NOT block for SMART_COOLDOWN - only handleSmartCooldown does
+                false
+            }
         }
     }
     

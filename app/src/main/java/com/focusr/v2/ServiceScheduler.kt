@@ -39,17 +39,23 @@ suspend fun scheduleService() {
         return
     }
     
-    // Check if any SIMPLE rules exist or any rules are currently active
+    // Check if any rules need immediate service start
     val hasSimpleRules = enabledRules.any { it.ruleType == RuleType.SIMPLE }
+    val hasSmartCooldownRules = enabledRules.any { it.ruleType == RuleType.SMART_COOLDOWN }
+    val hasMentalClarityRules = enabledRules.any { it.ruleType == RuleType.MENTAL_CLARITY }
     val hasActiveRules = enabledRules.any { blockingTimeManager.isRuleActive(it) }
     
-    Log.d("ServiceScheduler", "Has SIMPLE rules: $hasSimpleRules, Has active rules: $hasActiveRules")
+    Log.d("ServiceScheduler", "Has SIMPLE: $hasSimpleRules, SMART_COOLDOWN: $hasSmartCooldownRules, MENTAL_CLARITY: $hasMentalClarityRules, Active: $hasActiveRules")
     
-    if (hasSimpleRules || hasActiveRules) {
-        // Start service immediately - SIMPLE rules OR any active rule
-        Log.d("ServiceScheduler", "Starting service immediately (SIMPLE or active rules)")
+    // Start service immediately for any of these conditions:
+    // - SIMPLE rules (always need monitoring)
+    // - SMART_COOLDOWN rules (need session tracking)
+    // - MENTAL_CLARITY rules (need sleep detection)
+    // - Any currently active rule
+    if (hasSimpleRules || hasSmartCooldownRules || hasMentalClarityRules || hasActiveRules) {
+        Log.d("ServiceScheduler", "Starting service immediately")
         startMonitoringService()
-        cancelScheduledService()  // NEW: Cancel any pending alarms since service is running now
+        cancelScheduledService()
     } else {
         // All rules are SCHEDULED and not active yet
         Log.d("ServiceScheduler", "All rules are SCHEDULED and not active")

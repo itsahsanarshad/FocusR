@@ -227,6 +227,11 @@ class RuleViewModel(
                             } else null
                         } else null
                     }
+                    com.focusr.v2.models.RuleType.SMART_COOLDOWN -> {
+                        // Smart Cooldown is session-based, no predictable "next activation"
+                        // Would need UsageSessionManager access for cooldown remaining
+                        null
+                    }
                 }
             }
             .minByOrNull { it.second }

@@ -230,6 +230,22 @@ put("ruleType", rule.ruleType.name)
                 rule.wakeUpDetectedAt?.let {
                     put("wakeUpDetectedAt", it)
                 }
+                
+                // SMART_COOLDOWN rule fields
+                rule.maxUsageMinutes?.let {
+                    put("maxUsageMinutes", it)
+                }
+                rule.cooldownMinutes?.let {
+                    put("cooldownMinutes", it)
+                }
+                put("sessionResetMinutes", rule.sessionResetMinutes)
+                put("postClosureBreakEnabled", rule.postClosureBreakEnabled)
+                rule.postClosureBreakMinutes?.let {
+                    put("postClosureBreakMinutes", it)
+                }
+                rule.warnBeforeMinutes?.let {
+                    put("warnBeforeMinutes", it)
+                }
             }
             jsonArray.put(jsonObject)
         }
@@ -311,6 +327,21 @@ put("ruleType", rule.ruleType.name)
                     morningWindowEnd = jsonObject.optInt("morningWindowEnd", 12),
                     wakeUpDetectedAt = if (jsonObject.has("wakeUpDetectedAt")) {
                         jsonObject.getLong("wakeUpDetectedAt")
+                    } else null,
+                    // SMART_COOLDOWN fields
+                    maxUsageMinutes = if (jsonObject.has("maxUsageMinutes")) {
+                        jsonObject.getInt("maxUsageMinutes")
+                    } else null,
+                    cooldownMinutes = if (jsonObject.has("cooldownMinutes")) {
+                        jsonObject.getInt("cooldownMinutes")
+                    } else null,
+                    sessionResetMinutes = jsonObject.optInt("sessionResetMinutes", 5),
+                    postClosureBreakEnabled = jsonObject.optBoolean("postClosureBreakEnabled", false),
+                    postClosureBreakMinutes = if (jsonObject.has("postClosureBreakMinutes")) {
+                        jsonObject.getInt("postClosureBreakMinutes")
+                    } else null,
+                    warnBeforeMinutes = if (jsonObject.has("warnBeforeMinutes")) {
+                        jsonObject.getInt("warnBeforeMinutes")
                     } else null
                 )
                 

@@ -175,6 +175,7 @@ fun RuleCard(
         RuleType.SIMPLE -> Color(0xFFFFB84D)  // Orange for SIMPLE
         RuleType.SCHEDULED -> Color(0xFF6C63FF)  // Purple for SCHEDULED
         RuleType.MENTAL_CLARITY -> Color(0xFF4ECDC4)  // Teal for MENTAL_CLARITY
+        RuleType.SMART_COOLDOWN -> Color(0xFFFF6B9D)  // Pink for SMART_COOLDOWN
     }
     
     Card(
@@ -208,6 +209,7 @@ fun RuleCard(
                                 RuleType.SIMPLE -> Icons.Outlined.Schedule
                                 RuleType.SCHEDULED -> Icons.Outlined.CalendarMonth
                                 RuleType.MENTAL_CLARITY -> Icons.Outlined.Bedtime
+                                RuleType.SMART_COOLDOWN -> Icons.Default.Refresh
                             },
                             contentDescription = null,
                             tint = accentColor,

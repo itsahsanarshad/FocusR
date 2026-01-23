@@ -44,7 +44,15 @@ data class BlockingRule(
     val sleepDetectionMinutes: Int = 300,         // No usage for X minutes = sleep (default 5 hours)
     val morningWindowStart: Int = 4,              // Morning detection window start hour (default 4 AM)
     val morningWindowEnd: Int = 12,               // Morning detection window end hour (default 12 PM)
-    val wakeUpDetectedAt: Long? = null            // Timestamp when wake-up was detected
+    val wakeUpDetectedAt: Long? = null,           // Timestamp when wake-up was detected
+    
+    // For SMART_COOLDOWN rules - session-based usage tracking
+    val maxUsageMinutes: Int? = null,             // Max continuous usage before cooldown (e.g., 30, 60)
+    val cooldownMinutes: Int? = null,             // Cooldown duration after limit (e.g., 15, 30)
+    val sessionResetMinutes: Int = 5,             // Minutes away from app = new session
+    val postClosureBreakEnabled: Boolean = false, // Enable break after closing app
+    val postClosureBreakMinutes: Int? = null,     // Break duration before reopening
+    val warnBeforeMinutes: Int? = null            // Warning notification X min before block
 ) {
     /**
      * Gets the actual package names, handling backward compatibility
@@ -72,12 +80,13 @@ data class BlockingRule(
     }
     
     /**
-     * Gets the priority based on rule type (SIMPLE=1, SCHEDULED=2, MENTAL_CLARITY=3)
+     * Gets the priority based on rule type
      */
     fun calculatePriority(): Int = when (ruleType) {
         RuleType.SIMPLE -> 1
         RuleType.SCHEDULED -> 2
         RuleType.MENTAL_CLARITY -> 3
+        RuleType.SMART_COOLDOWN -> 4
     }
     
     /**
@@ -89,10 +98,13 @@ data class BlockingRule(
             RuleType.SIMPLE -> durationMinutes != null && durationMinutes > 0
             RuleType.SCHEDULED -> fromTime != null && toTime != null
             RuleType.MENTAL_CLARITY -> {
-                // Must have either wind-down or morning fury enabled with valid settings
                 val hasWindDown = windDownEnabled && windDownTime != null
                 val hasMorningFury = morningFuryEnabled && morningBlockDuration != null && morningBlockDuration > 0
                 hasWindDown || hasMorningFury
+            }
+            RuleType.SMART_COOLDOWN -> {
+                maxUsageMinutes != null && maxUsageMinutes > 0 &&
+                cooldownMinutes != null && cooldownMinutes > 0
             }
         }
         return hasApps && hasValidTimes
@@ -132,6 +144,15 @@ data class BlockingRule(
                     parts.add("Morning: ${formatDuration(morningBlockDuration)}")
                 }
                 if (parts.isEmpty()) "Not configured" else parts.joinToString(" • ")
+            }
+            RuleType.SMART_COOLDOWN -> {
+                val maxUsage = maxUsageMinutes ?: return "Invalid rule"
+                val cooldown = cooldownMinutes ?: return "Invalid rule"
+                val parts = mutableListOf("Max ${formatDuration(maxUsage)}", "${formatDuration(cooldown)} cooldown")
+                if (postClosureBreakEnabled && postClosureBreakMinutes != null) {
+                    parts.add("${postClosureBreakMinutes}m break")
+                }
+                parts.joinToString(" • ")
             }
         }
     }
@@ -185,7 +206,8 @@ data class BlockingRule(
 enum class RuleType {
     SIMPLE,         // Block for duration - Priority 1
     SCHEDULED,      // Recurring schedule with days of week - Priority 2
-    MENTAL_CLARITY  // Smart sleep-aware blocking (wind-down + morning) - Priority 3
+    MENTAL_CLARITY, // Smart sleep-aware blocking (wind-down + morning) - Priority 3
+    SMART_COOLDOWN  // Session-based usage tracking with cooldown - Priority 4
 }
 
 /**

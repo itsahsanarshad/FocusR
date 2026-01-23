@@ -23,9 +23,11 @@ class AppMonitoringService : Service() {
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var blockingTimeManager: BlockingTimeManager
     private lateinit var sleepDetectionManager: SleepDetectionManager
+    private val usageSessionManager = UsageSessionManager()  // For Smart Cooldown
     private val notificationHandler = Handler(Looper.getMainLooper())
     private var notificationRunnable: Runnable? = null
     private var lastDetectedApp: String? = null
+    private var previousApp: String? = null  // Track app changes for session management
 
     companion object {
         const val CHANNEL_ID = "focus_blocker_channel"
@@ -85,6 +87,15 @@ class AppMonitoringService : Service() {
                 Log.d("AppMonitoringService", "Blocking $currentApp based on active rules")
                 blockApp(currentApp)
             }
+            
+            // Smart Cooldown: Session tracking and blocking
+            handleSmartCooldown(currentApp, allRules = preferencesManager.blockingRules.first())
+            
+            // Track app changes for post-closure break
+            if (previousApp != null && previousApp != currentApp) {
+                usageSessionManager.recordAppClosed(previousApp!!)
+            }
+            previousApp = currentApp
             
             // Auto-disable expired SIMPLE rules
             val allRules = preferencesManager.blockingRules.first()
@@ -252,5 +263,67 @@ class AppMonitoringService : Service() {
         stopNotificationUpdates()
         monitoringRunnable?.let { handler.removeCallbacks(it) }
         serviceScope.cancel()
+    }
+    
+    /**
+     * Handles Smart Cooldown rule logic:
+     * - Updates session tracking for current app
+     * - Triggers cooldown when usage limit exceeded
+     * - Blocks app during cooldown or post-closure break
+     */
+    private suspend fun handleSmartCooldown(currentApp: String, allRules: List<com.focusr.v2.models.BlockingRule>) {
+        Log.d("SmartCooldown", "handleSmartCooldown called for: $currentApp")
+        Log.d("SmartCooldown", "Total rules: ${allRules.size}, enabled SMART_COOLDOWN: ${allRules.count { it.enabled && it.ruleType == com.focusr.v2.models.RuleType.SMART_COOLDOWN }}")
+        
+        // Find Smart Cooldown rules that apply to this app
+        val smartCooldownRules = allRules.filter { rule ->
+            rule.enabled &&
+            rule.ruleType == com.focusr.v2.models.RuleType.SMART_COOLDOWN &&
+            rule.getApps().contains(currentApp)
+        }
+        
+        Log.d("SmartCooldown", "Rules matching $currentApp: ${smartCooldownRules.size}")
+        
+        if (smartCooldownRules.isEmpty()) {
+            Log.d("SmartCooldown", "No SMART_COOLDOWN rules for $currentApp - skipping")
+            return
+        }
+        
+        for (rule in smartCooldownRules) {
+            val maxUsage = rule.maxUsageMinutes ?: continue
+            val cooldownDuration = rule.cooldownMinutes ?: continue
+            
+            // Check if currently in cooldown
+            if (usageSessionManager.isInCooldown(currentApp)) {
+                val remaining = usageSessionManager.getCooldownRemainingMinutes(currentApp)
+                Log.d("AppMonitoringService", "Smart Cooldown: $currentApp in cooldown (${remaining}m left)")
+                blockApp(currentApp)
+                return
+            }
+            
+            // Check post-closure break
+            if (rule.postClosureBreakEnabled && rule.postClosureBreakMinutes != null) {
+                if (usageSessionManager.isInPostClosureBreak(currentApp, rule.postClosureBreakMinutes)) {
+                    val remaining = usageSessionManager.getPostClosureBreakRemainingMinutes(currentApp, rule.postClosureBreakMinutes)
+                    Log.d("AppMonitoringService", "Smart Cooldown: $currentApp in post-closure break (${remaining}m left)")
+                    blockApp(currentApp)
+                    return
+                }
+            }
+            
+            // Update session tracking
+            val session = usageSessionManager.updateSession(currentApp, rule.sessionResetMinutes)
+            val usedMinutes = session.totalUsageSeconds / 60
+            
+            Log.d("AppMonitoringService", "Smart Cooldown: $currentApp used ${usedMinutes}m / ${maxUsage}m")
+            
+            // Check if limit exceeded
+            if (usedMinutes >= maxUsage) {
+                Log.d("AppMonitoringService", "Smart Cooldown: $currentApp limit reached! Starting ${cooldownDuration}m cooldown")
+                usageSessionManager.startCooldown(currentApp, cooldownDuration)
+                blockApp(currentApp)
+                return
+            }
+        }
     }
 }

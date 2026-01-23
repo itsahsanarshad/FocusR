@@ -73,6 +73,13 @@ fun RuleEditorScreen(
     var morningWindowStart by remember { mutableStateOf(4) }  // 4 AM
     var morningWindowEnd by remember { mutableStateOf(12) }  // 12 PM
     
+    // SMART_COOLDOWN rule state
+    var maxUsageMinutes by remember { mutableStateOf(30) }  // Default 30 min
+    var cooldownMinutes by remember { mutableStateOf(15) }  // Default 15 min cooldown
+    var sessionResetMinutes by remember { mutableStateOf(5) }  // 5 min = new session
+    var postClosureBreakEnabled by remember { mutableStateOf(false) }
+    var postClosureBreakMinutes by remember { mutableStateOf(10) }  // Default 10 min
+    
     var showDeleteDialog by remember { mutableStateOf(false) }
     var existingRule by remember { mutableStateOf<BlockingRule?>(null) }
     var showAppPickerDialog by remember { mutableStateOf(false) }
@@ -120,6 +127,13 @@ fun RuleEditorScreen(
                             morningWindowStart = it.morningWindowStart
                             morningWindowEnd = it.morningWindowEnd
                             selectedDays = it.daysOfWeek
+                        }
+                        RuleType.SMART_COOLDOWN -> {
+                            it.maxUsageMinutes?.let { max -> maxUsageMinutes = max }
+                            it.cooldownMinutes?.let { cd -> cooldownMinutes = cd }
+                            sessionResetMinutes = it.sessionResetMinutes
+                            postClosureBreakEnabled = it.postClosureBreakEnabled
+                            it.postClosureBreakMinutes?.let { breakMin -> postClosureBreakMinutes = breakMin }
                         }
                     }
                 }
@@ -353,6 +367,7 @@ LaunchedEffect(Unit) {
                                         RuleType.SIMPLE -> Icons.Outlined.Schedule
                                         RuleType.SCHEDULED -> Icons.Outlined.CalendarMonth
                                         RuleType.MENTAL_CLARITY -> Icons.Outlined.Bedtime
+                                        RuleType.SMART_COOLDOWN -> Icons.Default.Refresh
                                     },
                                     contentDescription = null,
                                     tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
@@ -364,6 +379,7 @@ LaunchedEffect(Unit) {
                                         RuleType.SIMPLE -> "Simple"
                                         RuleType.SCHEDULED -> "Scheduled"
                                         RuleType.MENTAL_CLARITY -> "Mental Clarity"
+                                        RuleType.SMART_COOLDOWN -> "Smart Cooldown"
                                     },
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     color = Color.White,
@@ -381,6 +397,7 @@ LaunchedEffect(Unit) {
                         RuleType.SIMPLE -> "Block for a selected duration"
                         RuleType.SCHEDULED -> "Block during specific hours on selected days"
                         RuleType.MENTAL_CLARITY -> "Smart blocking: wind-down at night & morning focus"
+                        RuleType.SMART_COOLDOWN -> "Session-based usage limit with automatic cooldown"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f)
@@ -442,6 +459,19 @@ LaunchedEffect(Unit) {
                             onDaysChange = { selectedDays = it }
                         )
                     }
+                    
+                    RuleType.SMART_COOLDOWN -> {
+                        SmartCooldownRuleConfig(
+                            maxUsageMinutes = maxUsageMinutes,
+                            cooldownMinutes = cooldownMinutes,
+                            postClosureBreakEnabled = postClosureBreakEnabled,
+                            postClosureBreakMinutes = postClosureBreakMinutes,
+                            onMaxUsageChange = { maxUsageMinutes = it },
+                            onCooldownChange = { cooldownMinutes = it },
+                            onPostClosureBreakEnabledChange = { postClosureBreakEnabled = it },
+                            onPostClosureBreakMinutesChange = { postClosureBreakMinutes = it }
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -485,6 +515,19 @@ LaunchedEffect(Unit) {
                                 morningWindowStart = morningWindowStart,
                                 morningWindowEnd = morningWindowEnd,
                                 daysOfWeek = selectedDays
+                            )
+                            
+                            RuleType.SMART_COOLDOWN -> BlockingRule(
+                                id = ruleId ?: UUID.randomUUID().toString(),
+                                name = ruleName.ifEmpty { "Smart Cooldown" },
+                                packageNames = selectedApps.toList(),
+                                ruleType = RuleType.SMART_COOLDOWN,
+                                enabled = enabled,
+                                maxUsageMinutes = maxUsageMinutes,
+                                cooldownMinutes = cooldownMinutes,
+                                sessionResetMinutes = sessionResetMinutes,
+                                postClosureBreakEnabled = postClosureBreakEnabled,
+                                postClosureBreakMinutes = if (postClosureBreakEnabled) postClosureBreakMinutes else null
                             )
                         }
 
@@ -1185,5 +1228,191 @@ fun MentalClarityRuleConfig(
                 }
             }
         )
+    }
+}
+
+/**
+ * Configuration UI for Smart Cooldown rules (session-based usage tracking)
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SmartCooldownRuleConfig(
+    maxUsageMinutes: Int,
+    cooldownMinutes: Int,
+    postClosureBreakEnabled: Boolean,
+    postClosureBreakMinutes: Int,
+    onMaxUsageChange: (Int) -> Unit,
+    onCooldownChange: (Int) -> Unit,
+    onPostClosureBreakEnabledChange: (Boolean) -> Unit,
+    onPostClosureBreakMinutesChange: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Max Usage Duration
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.6f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "⏱️",
+                        fontSize = 20.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Max Usage Time",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Block app after continuous usage of:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                val usageDurations = listOf(
+                    15 to "15m",
+                    30 to "30m",
+                    45 to "45m",
+                    60 to "1h",
+                    90 to "1.5h",
+                    120 to "2h"
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    usageDurations.forEach { (minutes, label) ->
+                        FilterChip(
+                            selected = maxUsageMinutes == minutes,
+                            onClick = { onMaxUsageChange(minutes) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Cooldown Duration
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.6f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "❄️",
+                        fontSize = 20.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Cooldown Duration",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "How long to block after limit reached:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                val cooldownDurations = listOf(
+                    5 to "5m",
+                    10 to "10m",
+                    15 to "15m",
+                    30 to "30m",
+                    60 to "1h"
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    cooldownDurations.forEach { (minutes, label) ->
+                        FilterChip(
+                            selected = cooldownMinutes == minutes,
+                            onClick = { onCooldownChange(minutes) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Post-Closure Break (Optional)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.6f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "⏸️",
+                            fontSize = 20.sp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Post-Closure Break",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Switch(
+                        checked = postClosureBreakEnabled,
+                        onCheckedChange = onPostClosureBreakEnabledChange
+                    )
+                }
+                
+                if (postClosureBreakEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Wait before reopening app after closing:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val breakDurations = listOf(
+                        5 to "5m",
+                        10 to "10m",
+                        15 to "15m",
+                        30 to "30m"
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        breakDurations.forEach { (minutes, label) ->
+                            FilterChip(
+                                selected = postClosureBreakMinutes == minutes,
+                                onClick = { onPostClosureBreakMinutesChange(minutes) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
