@@ -43,16 +43,18 @@ suspend fun scheduleService() {
     val hasSimpleRules = enabledRules.any { it.ruleType == RuleType.SIMPLE }
     val hasSmartCooldownRules = enabledRules.any { it.ruleType == RuleType.SMART_COOLDOWN }
     val hasMentalClarityRules = enabledRules.any { it.ruleType == RuleType.MENTAL_CLARITY }
+    val hasPrayerModeRules = enabledRules.any { it.ruleType == RuleType.PRAYER_MODE }
     val hasActiveRules = enabledRules.any { blockingTimeManager.isRuleActive(it) }
     
-    Log.d("ServiceScheduler", "Has SIMPLE: $hasSimpleRules, SMART_COOLDOWN: $hasSmartCooldownRules, MENTAL_CLARITY: $hasMentalClarityRules, Active: $hasActiveRules")
+    Log.d("ServiceScheduler", "Has SIMPLE: $hasSimpleRules, SMART_COOLDOWN: $hasSmartCooldownRules, MENTAL_CLARITY: $hasMentalClarityRules, PRAYER_MODE: $hasPrayerModeRules, Active: $hasActiveRules")
     
     // Start service immediately for any of these conditions:
     // - SIMPLE rules (always need monitoring)
     // - SMART_COOLDOWN rules (need session tracking)
     // - MENTAL_CLARITY rules (need sleep detection)
+    // - PRAYER_MODE rules (need prayer time monitoring)
     // - Any currently active rule
-    if (hasSimpleRules || hasSmartCooldownRules || hasMentalClarityRules || hasActiveRules) {
+    if (hasSimpleRules || hasSmartCooldownRules || hasMentalClarityRules || hasPrayerModeRules || hasActiveRules) {
         Log.d("ServiceScheduler", "Starting service immediately")
         startMonitoringService()
         cancelScheduledService()

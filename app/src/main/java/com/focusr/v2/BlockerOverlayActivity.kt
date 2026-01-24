@@ -448,26 +448,63 @@ import androidx.compose.ui.window.DialogProperties
 import com.focusr.v2.ui.theme.OpalForAndroidTheme
 import kotlinx.coroutines.delay
 import java.util.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 class BlockerOverlayActivity : ComponentActivity() {
+
+    private val preferencesManager by lazy { PreferencesManager(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val blockedAppPackage = intent.getStringExtra("blocked_app") ?: ""
-        val appCategory = getAppCategory(blockedAppPackage)
-        Log.d("BlockerDebugBOA", appCategory.toString())
+        val isPrayerMode = intent.getBooleanExtra("is_prayer_mode", false)
+        
+        Log.d("BlockerDebugBOA", "isPrayerMode: $isPrayerMode, blockedApp: $blockedAppPackage")
 
-        setContent {
-            OpalForAndroidTheme(darkTheme = false) {
-                ModernBlockerOverlay(
-                    blockedApp = blockedAppPackage,
-                    appCategory = appCategory,
-                    onChooseToClose = {
-                        closeBlockedApp()
-                        finish()
-                    }
-                )
+        if (isPrayerMode) {
+            val prayerName = intent.getStringExtra("prayer_name") ?: "Prayer"
+            val prayerMessage = intent.getStringExtra("prayer_message") ?: "It's prayer time."
+            val canUnlock = intent.getBooleanExtra("can_unlock", false)
+            val minutesUntilUnlock = intent.getIntExtra("minutes_until_unlock", 0)
+            val ruleId = intent.getStringExtra("rule_id") ?: ""
+            
+            setContent {
+                OpalForAndroidTheme(darkTheme = false) {
+                    PrayerBlockerOverlay(
+                        prayerName = prayerName,
+                        prayerMessage = prayerMessage,
+                        canUnlock = canUnlock,
+                        minutesUntilUnlock = minutesUntilUnlock,
+                        onClose = {
+                            closeBlockedApp()
+                            finish()
+                        },
+                        onUnlock = {
+                            unlockPrayer(ruleId)
+                            finish()
+                        }
+                    )
+                }
+            }
+        } else {
+            val appCategory = getAppCategory(blockedAppPackage)
+            Log.d("BlockerDebugBOA", appCategory.toString())
+
+            setContent {
+                OpalForAndroidTheme(darkTheme = false) {
+                    ModernBlockerOverlay(
+                        blockedApp = blockedAppPackage,
+                        appCategory = appCategory,
+                        onChooseToClose = {
+                            closeBlockedApp()
+                            finish()
+                        }
+                    )
+                }
             }
         }
     }
@@ -478,6 +515,189 @@ class BlockerOverlayActivity : ComponentActivity() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         startActivity(homeIntent)
+    }
+    
+    private fun unlockPrayer(ruleId: String) {
+        if (ruleId.isEmpty()) return
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            val rules = preferencesManager.blockingRules.first()
+            rules.find { it.id == ruleId }?.let { rule ->
+                preferencesManager.updateRule(rule.copy(
+                    currentPrayerUnlocked = true,
+                    lastPrayerConfirmedAt = System.currentTimeMillis()
+                ))
+                Log.d("BlockerOverlay", "Prayer unlocked for rule: ${rule.getDisplayName()}")
+            }
+        }
+    }
+    
+    @Composable
+    fun PrayerBlockerOverlay(
+        prayerName: String,
+        prayerMessage: String,
+        canUnlock: Boolean,
+        minutesUntilUnlock: Int,
+        onClose: () -> Unit,
+        onUnlock: () -> Unit
+    ) {
+        var showContent by remember { mutableStateOf(false) }
+        var unlockClicked by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+            delay(500)
+            showContent = true
+        }
+
+        Dialog(
+            onDismissRequest = { },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF1A1A2E),
+                                Color(0xFF16213E),
+                                Color(0xFF0F3460)
+                            ),
+                            center = Offset(0.3f, 0.1f),
+                            radius = 1000f
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedVisibility(
+                    visible = showContent,
+                    enter = fadeIn(animationSpec = tween(1000)) + scaleIn(
+                        initialScale = 0.85f,
+                        animationSpec = tween(1000, easing = FastOutSlowInEasing)
+                    ),
+                    exit = fadeOut(animationSpec = tween(500))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // Prayer Icon
+                        Surface(
+                            modifier = Modifier.size(100.dp),
+                            shape = CircleShape,
+                            color = Color(0xFFFFD700).copy(alpha = 0.2f),
+                            border = BorderStroke(3.dp, Color(0xFFFFD700))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFFD700),
+                                    modifier = Modifier.size(50.dp)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
+                        // Prayer Name
+                        Text(
+                            text = "🕌 $prayerName Time",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Prayer Message
+                        Text(
+                            text = prayerMessage,
+                            fontSize = 18.sp,
+                            color = Color.White.copy(alpha = 0.8f),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 26.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(40.dp))
+                        
+                        if (canUnlock) {
+                            // Show unlock button
+                            Button(
+                                onClick = {
+                                    unlockClicked = true
+                                    onUnlock()
+                                },
+                                enabled = !unlockClicked,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFFFD700),
+                                    disabledContainerColor = Color(0xFFFFD700).copy(alpha = 0.5f)
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF1A1A2E),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (unlockClicked) "Unlocking..." else "I've Prayed ✓",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1A1A2E)
+                                )
+                            }
+                        } else {
+                            // Show waiting message
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "⏳ Please take time to pray",
+                                    fontSize = 16.sp,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Unlock available in $minutesUntilUnlock min",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFFFFD700),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        // Close button (go home)
+                        TextButton(
+                            onClick = onClose,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Go Home",
+                                fontSize = 16.sp,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
 //    fun getAppCategory(packageName: String): AppCategory {

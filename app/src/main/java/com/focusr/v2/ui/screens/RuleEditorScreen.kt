@@ -21,6 +21,7 @@ import androidx.navigation.NavController
 import com.focusr.v2.AppInfo
 import com.focusr.v2.models.BlockingRule
 import com.focusr.v2.models.DayOfWeek
+import com.focusr.v2.models.Prayer
 import com.focusr.v2.models.RuleType
 import com.focusr.v2.navigation.Screen  // ADD THIS
 import com.focusr.v2.ui.viewmodels.RuleViewModel
@@ -80,6 +81,14 @@ fun RuleEditorScreen(
     var postClosureBreakEnabled by remember { mutableStateOf(false) }
     var postClosureBreakMinutes by remember { mutableStateOf(10) }  // Default 10 min
     
+    // PRAYER_MODE rule state
+    var prayerCity by remember { mutableStateOf("") }
+    var prayerCountry by remember { mutableStateOf("") }
+    var prayerMethod by remember { mutableStateOf(2) }  // ISNA default
+    var asrSchool by remember { mutableStateOf(0) }  // 0 = Shafi, 1 = Hanafi
+    var minimumPrayerMinutes by remember { mutableStateOf(5) }
+    var enabledPrayers by remember { mutableStateOf(Prayer.values().toSet()) }
+    
     var showDeleteDialog by remember { mutableStateOf(false) }
     var existingRule by remember { mutableStateOf<BlockingRule?>(null) }
     var showAppPickerDialog by remember { mutableStateOf(false) }
@@ -134,6 +143,14 @@ fun RuleEditorScreen(
                             sessionResetMinutes = it.sessionResetMinutes
                             postClosureBreakEnabled = it.postClosureBreakEnabled
                             it.postClosureBreakMinutes?.let { breakMin -> postClosureBreakMinutes = breakMin }
+                        }
+                        RuleType.PRAYER_MODE -> {
+                            it.prayerCity?.let { city -> prayerCity = city }
+                            it.prayerCountry?.let { country -> prayerCountry = country }
+                            prayerMethod = it.prayerMethod
+                            asrSchool = it.asrSchool
+                            minimumPrayerMinutes = it.minimumPrayerMinutes
+                            enabledPrayers = it.enabledPrayers
                         }
                     }
                 }
@@ -368,6 +385,7 @@ LaunchedEffect(Unit) {
                                         RuleType.SCHEDULED -> Icons.Outlined.CalendarMonth
                                         RuleType.MENTAL_CLARITY -> Icons.Outlined.Bedtime
                                         RuleType.SMART_COOLDOWN -> Icons.Default.Refresh
+                                        RuleType.PRAYER_MODE -> Icons.Default.Star
                                     },
                                     contentDescription = null,
                                     tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
@@ -380,6 +398,7 @@ LaunchedEffect(Unit) {
                                         RuleType.SCHEDULED -> "Scheduled"
                                         RuleType.MENTAL_CLARITY -> "Mental Clarity"
                                         RuleType.SMART_COOLDOWN -> "Smart Cooldown"
+                                        RuleType.PRAYER_MODE -> "Prayer Mode"
                                     },
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     color = Color.White,
@@ -398,6 +417,7 @@ LaunchedEffect(Unit) {
                         RuleType.SCHEDULED -> "Block during specific hours on selected days"
                         RuleType.MENTAL_CLARITY -> "Smart blocking: wind-down at night & morning focus"
                         RuleType.SMART_COOLDOWN -> "Session-based usage limit with automatic cooldown"
+                        RuleType.PRAYER_MODE -> "Block apps during prayer times until confirmation"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f)
@@ -472,6 +492,23 @@ LaunchedEffect(Unit) {
                             onPostClosureBreakMinutesChange = { postClosureBreakMinutes = it }
                         )
                     }
+                    
+                    RuleType.PRAYER_MODE -> {
+                        PrayerModeRuleConfig(
+                            prayerCity = prayerCity,
+                            prayerCountry = prayerCountry,
+                            prayerMethod = prayerMethod,
+                            asrSchool = asrSchool,
+                            minimumPrayerMinutes = minimumPrayerMinutes,
+                            enabledPrayers = enabledPrayers,
+                            onCityChange = { prayerCity = it },
+                            onCountryChange = { prayerCountry = it },
+                            onMethodChange = { prayerMethod = it },
+                            onAsrSchoolChange = { asrSchool = it },
+                            onMinimumMinutesChange = { minimumPrayerMinutes = it },
+                            onEnabledPrayersChange = { enabledPrayers = it }
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -528,6 +565,20 @@ LaunchedEffect(Unit) {
                                 sessionResetMinutes = sessionResetMinutes,
                                 postClosureBreakEnabled = postClosureBreakEnabled,
                                 postClosureBreakMinutes = if (postClosureBreakEnabled) postClosureBreakMinutes else null
+                            )
+                            
+                            RuleType.PRAYER_MODE -> BlockingRule(
+                                id = ruleId ?: UUID.randomUUID().toString(),
+                                name = ruleName.ifEmpty { "Prayer Mode" },
+                                packageNames = selectedApps.toList(),
+                                ruleType = RuleType.PRAYER_MODE,
+                                enabled = enabled,
+                                prayerCity = prayerCity,
+                                prayerCountry = prayerCountry,
+                                prayerMethod = prayerMethod,
+                                asrSchool = asrSchool,
+                                minimumPrayerMinutes = minimumPrayerMinutes,
+                                enabledPrayers = enabledPrayers
                             )
                         }
 
@@ -1408,6 +1459,324 @@ fun SmartCooldownRuleConfig(
                                 selected = postClosureBreakMinutes == minutes,
                                 onClick = { onPostClosureBreakMinutesChange(minutes) },
                                 label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Configuration UI for Prayer Mode rules (Islamic prayer time blocking)
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PrayerModeRuleConfig(
+    prayerCity: String,
+    prayerCountry: String,
+    prayerMethod: Int,
+    asrSchool: Int,  // 0 = Shafi, 1 = Hanafi
+    minimumPrayerMinutes: Int,
+    enabledPrayers: Set<Prayer>,
+    onCityChange: (String) -> Unit,
+    onCountryChange: (String) -> Unit,
+    onMethodChange: (Int) -> Unit,
+    onAsrSchoolChange: (Int) -> Unit,
+    onMinimumMinutesChange: (Int) -> Unit,
+    onEnabledPrayersChange: (Set<Prayer>) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Location Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Location for Prayer Times",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                }
+                
+                OutlinedTextField(
+                    value = prayerCity,
+                    onValueChange = onCityChange,
+                    label = { Text("City") },
+                    placeholder = { Text("e.g., Karachi") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFFFD700),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFFFFD700),
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+                        cursorColor = Color(0xFFFFD700),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+                
+                OutlinedTextField(
+                    value = prayerCountry,
+                    onValueChange = onCountryChange,
+                    label = { Text("Country") },
+                    placeholder = { Text("e.g., Pakistan") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFFFD700),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFFFFD700),
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+                        cursorColor = Color(0xFFFFD700),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+            }
+        }
+        
+        // Prayers Selection
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Select Prayers to Block For",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                }
+                
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Prayer.values().forEach { prayer ->
+                        val isSelected = enabledPrayers.contains(prayer)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                onEnabledPrayersChange(
+                                    if (isSelected) enabledPrayers - prayer
+                                    else enabledPrayers + prayer
+                                )
+                            },
+                            label = { 
+                                Text("${prayer.emoji} ${prayer.displayName}")
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFFD700).copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Minimum Wait Time
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Minimum Prayer Time",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                }
+                
+                Text(
+                    text = "Wait time before unlock button appears",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                
+                val durations = mapOf(
+                    3 to "3 min",
+                    5 to "5 min",
+                    10 to "10 min",
+                    15 to "15 min"
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    durations.forEach { (minutes, label) ->
+                        FilterChip(
+                            selected = minimumPrayerMinutes == minutes,
+                            onClick = { onMinimumMinutesChange(minutes) },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFFD700).copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Asr Calculation School
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Asr Calculation Method",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                }
+                
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = asrSchool == 0,
+                        onClick = { onAsrSchoolChange(0) },
+                        label = { Text("Shafi (Standard)") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFFFD700).copy(alpha = 0.3f)
+                        )
+                    )
+                    FilterChip(
+                        selected = asrSchool == 1,
+                        onClick = { onAsrSchoolChange(1) },
+                        label = { Text("Hanafi") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFFFD700).copy(alpha = 0.3f)
+                        )
+                    )
+                }
+                
+                Text(
+                    text = "Hanafi calculates Asr later than Shafi",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+            }
+        }
+        
+        // Calculation Method
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2A2A40).copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Calculate,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Calculation Method",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                }
+                
+                val methods = mapOf(
+                    1 to "University of Islamic Sciences, Karachi",
+                    2 to "Islamic Society of North America (ISNA)",
+                    3 to "Muslim World League",
+                    4 to "Umm al-Qura University, Makkah",
+                    5 to "Egyptian General Authority of Survey"
+                )
+                
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    methods.forEach { (id, name) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onMethodChange(id) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = prayerMethod == id,
+                                onClick = { onMethodChange(id) },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = Color(0xFFFFD700)
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.9f)
                             )
                         }
                     }

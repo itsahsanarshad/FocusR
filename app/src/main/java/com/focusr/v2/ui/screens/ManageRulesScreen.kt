@@ -176,6 +176,7 @@ fun RuleCard(
         RuleType.SCHEDULED -> Color(0xFF6C63FF)  // Purple for SCHEDULED
         RuleType.MENTAL_CLARITY -> Color(0xFF4ECDC4)  // Teal for MENTAL_CLARITY
         RuleType.SMART_COOLDOWN -> Color(0xFFFF6B9D)  // Pink for SMART_COOLDOWN
+        RuleType.PRAYER_MODE -> Color(0xFFFFD700)  // Gold for PRAYER_MODE
     }
     
     Card(
@@ -210,6 +211,7 @@ fun RuleCard(
                                 RuleType.SCHEDULED -> Icons.Outlined.CalendarMonth
                                 RuleType.MENTAL_CLARITY -> Icons.Outlined.Bedtime
                                 RuleType.SMART_COOLDOWN -> Icons.Default.Refresh
+                                RuleType.PRAYER_MODE -> Icons.Default.Star
                             },
                             contentDescription = null,
                             tint = accentColor,

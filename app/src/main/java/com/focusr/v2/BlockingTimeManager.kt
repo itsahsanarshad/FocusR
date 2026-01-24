@@ -1,10 +1,14 @@
 package com.focusr.v2
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.first
 import java.util.*
 
-class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
+class BlockingTimeManager(
+    private val preferencesManager: PreferencesManager,
+    private val prayerTimeManager: PrayerTimeManager? = null
+) {
 
     // ========== NEW RULE-BASED SYSTEM ==========
     
@@ -59,6 +63,7 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
                 // shouldBlockApp() should NOT block for SMART_COOLDOWN - only handleSmartCooldown does
                 false
             }
+            com.focusr.v2.models.RuleType.PRAYER_MODE -> checkPrayerModeRule(rule)
         }
     }
     
@@ -146,6 +151,64 @@ class BlockingTimeManager(private val preferencesManager: PreferencesManager) {
         }
         
         return false
+    }
+    
+    /**
+     * Check if a PRAYER_MODE rule is active.
+     * Active during prayer windows when user hasn't confirmed prayer completion.
+     */
+    private fun checkPrayerModeRule(rule: com.focusr.v2.models.BlockingRule): Boolean {
+        val prayerManager = prayerTimeManager ?: return false
+        
+        // Check if user has already unlocked this prayer session
+        if (rule.currentPrayerUnlocked) {
+            Log.d("BlockingTimeManager", "Prayer Mode: User already unlocked this session")
+            return false
+        }
+        
+        // Get current prayer window info
+        val currentPrayer = prayerManager.getCurrentPrayer()
+        if (currentPrayer == null) {
+            Log.d("BlockingTimeManager", "Prayer Mode: Not in any prayer window")
+            return false
+        }
+        
+        // Check if this prayer is enabled in the rule
+        if (!rule.enabledPrayers.contains(currentPrayer)) {
+            Log.d("BlockingTimeManager", "Prayer Mode: ${currentPrayer.displayName} not enabled")
+            return false
+        }
+        
+        Log.d("BlockingTimeManager", "Prayer Mode: Active for ${currentPrayer.displayName}")
+        return true
+    }
+    
+    /**
+     * Check if minimum prayer time has passed (for unlock button visibility)
+     */
+    fun canUnlockPrayer(rule: com.focusr.v2.models.BlockingRule): Boolean {
+        val prayerManager = prayerTimeManager ?: return false
+        val currentPrayer = prayerManager.getCurrentPrayer() ?: return false
+        
+        val prayerStartTime = prayerManager.getPrayerStartTime(currentPrayer) ?: return false
+        val elapsed = System.currentTimeMillis() - prayerStartTime
+        val elapsedMinutes = elapsed / 1000 / 60
+        
+        return elapsedMinutes >= rule.minimumPrayerMinutes
+    }
+    
+    /**
+     * Get remaining minutes before unlock button appears
+     */
+    fun getMinutesUntilUnlock(rule: com.focusr.v2.models.BlockingRule): Int {
+        val prayerManager = prayerTimeManager ?: return 0
+        val currentPrayer = prayerManager.getCurrentPrayer() ?: return 0
+        
+        val prayerStartTime = prayerManager.getPrayerStartTime(currentPrayer) ?: return 0
+        val elapsed = System.currentTimeMillis() - prayerStartTime
+        val elapsedMinutes = (elapsed / 1000 / 60).toInt()
+        
+        return (rule.minimumPrayerMinutes - elapsedMinutes).coerceAtLeast(0)
     }
     
     /**

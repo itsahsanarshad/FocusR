@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.focusr.v2.models.BlockingRule
 import com.focusr.v2.models.DayOfWeek
+import com.focusr.v2.models.Prayer
 import com.focusr.v2.models.RuleType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -246,6 +247,24 @@ put("ruleType", rule.ruleType.name)
                 rule.warnBeforeMinutes?.let {
                     put("warnBeforeMinutes", it)
                 }
+                
+                // PRAYER_MODE rule fields
+                rule.prayerCity?.let {
+                    put("prayerCity", it)
+                }
+                rule.prayerCountry?.let {
+                    put("prayerCountry", it)
+                }
+                put("prayerMethod", rule.prayerMethod)
+                put("asrSchool", rule.asrSchool)
+                put("minimumPrayerMinutes", rule.minimumPrayerMinutes)
+                val enabledPrayersArray = JSONArray()
+                rule.enabledPrayers.forEach { prayer -> enabledPrayersArray.put(prayer.name) }
+                put("enabledPrayers", enabledPrayersArray)
+                rule.lastPrayerConfirmedAt?.let {
+                    put("lastPrayerConfirmedAt", it)
+                }
+                put("currentPrayerUnlocked", rule.currentPrayerUnlocked)
             }
             jsonArray.put(jsonObject)
         }
@@ -342,7 +361,27 @@ put("ruleType", rule.ruleType.name)
                     } else null,
                     warnBeforeMinutes = if (jsonObject.has("warnBeforeMinutes")) {
                         jsonObject.getInt("warnBeforeMinutes")
-                    } else null
+                    } else null,
+                    // PRAYER_MODE fields
+                    prayerCity = if (jsonObject.has("prayerCity")) {
+                        jsonObject.getString("prayerCity")
+                    } else null,
+                    prayerCountry = if (jsonObject.has("prayerCountry")) {
+                        jsonObject.getString("prayerCountry")
+                    } else null,
+                    prayerMethod = jsonObject.optInt("prayerMethod", 2),
+                    asrSchool = jsonObject.optInt("asrSchool", 0),
+                    minimumPrayerMinutes = jsonObject.optInt("minimumPrayerMinutes", 5),
+                    enabledPrayers = if (jsonObject.has("enabledPrayers")) {
+                        val prayersArray = jsonObject.getJSONArray("enabledPrayers")
+                        (0 until prayersArray.length()).mapNotNull { i ->
+                            try { Prayer.valueOf(prayersArray.getString(i)) } catch (e: Exception) { null }
+                        }.toSet()
+                    } else Prayer.values().toSet(),
+                    lastPrayerConfirmedAt = if (jsonObject.has("lastPrayerConfirmedAt")) {
+                        jsonObject.getLong("lastPrayerConfirmedAt")
+                    } else null,
+                    currentPrayerUnlocked = jsonObject.optBoolean("currentPrayerUnlocked", false)
                 )
                 
                 rules.add(rule)

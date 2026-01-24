@@ -232,6 +232,11 @@ class RuleViewModel(
                         // Would need UsageSessionManager access for cooldown remaining
                         null
                     }
+                    com.focusr.v2.models.RuleType.PRAYER_MODE -> {
+                        // Prayer Mode is prayer-time based, managed by PrayerTimeManager
+                        // No predictable "next activation" without prayer time data
+                        null
+                    }
                 }
             }
             .minByOrNull { it.second }

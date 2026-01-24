@@ -52,7 +52,17 @@ data class BlockingRule(
     val sessionResetMinutes: Int = 5,             // Minutes away from app = new session
     val postClosureBreakEnabled: Boolean = false, // Enable break after closing app
     val postClosureBreakMinutes: Int? = null,     // Break duration before reopening
-    val warnBeforeMinutes: Int? = null            // Warning notification X min before block
+    val warnBeforeMinutes: Int? = null,           // Warning notification X min before block
+    
+    // For PRAYER_MODE rules - Islamic prayer time blocking
+    val prayerCity: String? = null,               // City for prayer time calculation
+    val prayerCountry: String? = null,            // Country for prayer time calculation
+    val prayerMethod: Int = 2,                    // Calculation method (default: ISNA = 2)
+    val asrSchool: Int = 0,                       // Asr calculation: 0 = Shafi, 1 = Hanafi
+    val minimumPrayerMinutes: Int = 5,            // Minimum wait before unlock button appears
+    val enabledPrayers: Set<Prayer> = Prayer.values().toSet(), // Which prayers to block for
+    val lastPrayerConfirmedAt: Long? = null,      // Timestamp when user confirmed prayer
+    val currentPrayerUnlocked: Boolean = false    // Whether current prayer session is unlocked
 ) {
     /**
      * Gets the actual package names, handling backward compatibility
@@ -87,6 +97,7 @@ data class BlockingRule(
         RuleType.SCHEDULED -> 2
         RuleType.MENTAL_CLARITY -> 3
         RuleType.SMART_COOLDOWN -> 4
+        RuleType.PRAYER_MODE -> 5
     }
     
     /**
@@ -105,6 +116,10 @@ data class BlockingRule(
             RuleType.SMART_COOLDOWN -> {
                 maxUsageMinutes != null && maxUsageMinutes > 0 &&
                 cooldownMinutes != null && cooldownMinutes > 0
+            }
+            RuleType.PRAYER_MODE -> {
+                !prayerCity.isNullOrBlank() && !prayerCountry.isNullOrBlank() &&
+                enabledPrayers.isNotEmpty() && minimumPrayerMinutes > 0
             }
         }
         return hasApps && hasValidTimes
@@ -153,6 +168,12 @@ data class BlockingRule(
                     parts.add("${postClosureBreakMinutes}m break")
                 }
                 parts.joinToString(" • ")
+            }
+            RuleType.PRAYER_MODE -> {
+                val location = "$prayerCity, $prayerCountry"
+                val prayerCount = enabledPrayers.size
+                val prayerText = if (prayerCount == 5) "All prayers" else "$prayerCount prayers"
+                "$location • $prayerText • ${minimumPrayerMinutes}m min"
             }
         }
     }
@@ -207,7 +228,8 @@ enum class RuleType {
     SIMPLE,         // Block for duration - Priority 1
     SCHEDULED,      // Recurring schedule with days of week - Priority 2
     MENTAL_CLARITY, // Smart sleep-aware blocking (wind-down + morning) - Priority 3
-    SMART_COOLDOWN  // Session-based usage tracking with cooldown - Priority 4
+    SMART_COOLDOWN, // Session-based usage tracking with cooldown - Priority 4
+    PRAYER_MODE     // Islamic prayer time blocking - Priority 5
 }
 
 /**

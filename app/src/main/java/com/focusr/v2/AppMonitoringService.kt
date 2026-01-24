@@ -23,6 +23,7 @@ class AppMonitoringService : Service() {
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var blockingTimeManager: BlockingTimeManager
     private lateinit var sleepDetectionManager: SleepDetectionManager
+    private lateinit var prayerTimeManager: PrayerTimeManager  // For Prayer Mode
     private val usageSessionManager = UsageSessionManager()  // For Smart Cooldown
     private val notificationHandler = Handler(Looper.getMainLooper())
     private var notificationRunnable: Runnable? = null
@@ -37,7 +38,8 @@ class AppMonitoringService : Service() {
     override fun onCreate() {
         super.onCreate()
         preferencesManager = PreferencesManager(this)
-        blockingTimeManager = BlockingTimeManager(preferencesManager)
+        prayerTimeManager = PrayerTimeManager(this)
+        blockingTimeManager = BlockingTimeManager(preferencesManager, prayerTimeManager)
         sleepDetectionManager = SleepDetectionManager(this)
         createNotificationChannel()
         
@@ -82,10 +84,34 @@ class AppMonitoringService : Service() {
             
             delay(100)
             
-            // NEW: Check if THIS specific app should be blocked based on its rules
+            // Check if THIS specific app should be blocked based on its rules
             if (blockingTimeManager.shouldBlockApp(currentApp)) {
                 Log.d("AppMonitoringService", "Blocking $currentApp based on active rules")
-                blockApp(currentApp)
+                
+                // Check if this is a PRAYER_MODE block
+                val allRulesNow = preferencesManager.blockingRules.first()
+                val prayerRule = allRulesNow.find { rule ->
+                    rule.enabled &&
+                    rule.ruleType == com.focusr.v2.models.RuleType.PRAYER_MODE &&
+                    rule.getApps().contains(currentApp) &&
+                    !rule.currentPrayerUnlocked
+                }
+                
+                if (prayerRule != null) {
+                    val currentPrayer = prayerTimeManager.getCurrentPrayer()
+                    val canUnlock = blockingTimeManager.canUnlockPrayer(prayerRule)
+                    val minutesUntilUnlock = blockingTimeManager.getMinutesUntilUnlock(prayerRule)
+                    blockAppForPrayer(
+                        currentApp, 
+                        currentPrayer?.displayName ?: "Prayer",
+                        currentPrayer?.overlayMessage ?: "It's prayer time. Take a moment to connect.",
+                        canUnlock,
+                        minutesUntilUnlock,
+                        prayerRule.id
+                    )
+                } else {
+                    blockApp(currentApp)
+                }
             }
             
             // Smart Cooldown: Session tracking and blocking
@@ -152,6 +178,45 @@ class AppMonitoringService : Service() {
                 preferencesManager.updateRule(rule.copy(wakeUpDetectedAt = null))
             }
             
+            // Prayer Mode: Reset unlock status when prayer window ends
+            val prayerModeRules = allRules.filter { rule ->
+                rule.enabled &&
+                rule.ruleType == com.focusr.v2.models.RuleType.PRAYER_MODE &&
+                rule.currentPrayerUnlocked
+            }
+            
+            prayerModeRules.forEach { rule ->
+                // Check if we're still in a prayer window
+                val currentPrayer = prayerTimeManager.getCurrentPrayer()
+                if (currentPrayer == null) {
+                    // No current prayer - reset unlock status for next prayer
+                    Log.d("AppMonitoringService", "Prayer window ended, resetting unlock for: ${rule.getDisplayName()}")
+                    preferencesManager.updateRule(rule.copy(
+                        currentPrayerUnlocked = false,
+                        lastPrayerConfirmedAt = null
+                    ))
+                }
+            }
+            
+            // Prayer Mode: Fetch/refresh prayer times for rules that need it
+            val prayerRulesNeedingTimes = allRules.filter { rule ->
+                rule.enabled &&
+                rule.ruleType == com.focusr.v2.models.RuleType.PRAYER_MODE &&
+                !rule.prayerCity.isNullOrBlank() &&
+                !rule.prayerCountry.isNullOrBlank()
+            }
+            
+            if (prayerRulesNeedingTimes.isNotEmpty()) {
+                val firstRule = prayerRulesNeedingTimes.first()
+                // Fetch prayer times if needed (will use cache if available)
+                prayerTimeManager.getPrayerTimes(
+                    city = firstRule.prayerCity!!,
+                    country = firstRule.prayerCountry!!,
+                    method = firstRule.prayerMethod,
+                    school = firstRule.asrSchool
+                )
+            }
+            
             // Check if any enabled rules remain
             val enabledRules = preferencesManager.blockingRules.first().filter { it.enabled }
 
@@ -203,6 +268,27 @@ class AppMonitoringService : Service() {
         val intent = Intent(this, BlockerOverlayActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra("blocked_app", packageName)
+        }
+        startActivity(intent)
+    }
+    
+    private fun blockAppForPrayer(
+        packageName: String,
+        prayerName: String,
+        prayerMessage: String,
+        canUnlock: Boolean,
+        minutesUntilUnlock: Int,
+        ruleId: String
+    ) {
+        val intent = Intent(this, BlockerOverlayActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra("blocked_app", packageName)
+            putExtra("is_prayer_mode", true)
+            putExtra("prayer_name", prayerName)
+            putExtra("prayer_message", prayerMessage)
+            putExtra("can_unlock", canUnlock)
+            putExtra("minutes_until_unlock", minutesUntilUnlock)
+            putExtra("rule_id", ruleId)
         }
         startActivity(intent)
     }
