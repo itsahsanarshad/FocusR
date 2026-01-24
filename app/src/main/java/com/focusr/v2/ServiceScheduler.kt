@@ -4,14 +4,22 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import com.focusr.v2.models.BlockingRule
 import com.focusr.v2.models.RuleType
 import kotlinx.coroutines.flow.first
 import java.util.*
 
-
+/**
+ * ServiceScheduler for FocusR.
+ * 
+ * Note: With Accessibility Service, we no longer need to start/stop a foreground service.
+ * The Accessibility Service is managed by Android and runs when the user enables it
+ * in Settings > Accessibility > FocusR.
+ * 
+ * This scheduler now only handles AlarmManager scheduling for edge cases like
+ * scheduled rules that need to trigger at specific times.
+ */
 class ServiceScheduler(private val context: Context) {
     private val preferencesManager = PreferencesManager(context)
     private val blockingTimeManager = BlockingTimeManager(preferencesManager)
@@ -19,156 +27,110 @@ class ServiceScheduler(private val context: Context) {
     
     companion object {
         private const val REQUEST_CODE = 1001
-        private const val PRE_START_MINUTES = 5 // Start 5 min before scheduled time
+        private const val PRE_START_MINUTES = 5
     }
 
     /**
-     * NEW: Schedule or start service based on rules (rule-based system)
+     * Called when rules change. With Accessibility Service, this is mostly a no-op
+     * since the service is always running when enabled by the user.
      */
-suspend fun scheduleService() {
-    val allRules = preferencesManager.blockingRules.first()
-    val enabledRules = allRules.filter { it.enabled }
-    
-    Log.d("ServiceScheduler", "=== scheduleService() called ===")
-    Log.d("ServiceScheduler", "Total rules: ${allRules.size}, Enabled: ${enabledRules.size}")
-    
-    if (enabledRules.isEmpty()) {
-        Log.d("ServiceScheduler", "No enabled rules, canceling service")
-        cancelScheduledService()
-        stopService()
-        return
-    }
-    
-    // Check if any rules need immediate service start
-    val hasSimpleRules = enabledRules.any { it.ruleType == RuleType.SIMPLE }
-    val hasSmartCooldownRules = enabledRules.any { it.ruleType == RuleType.SMART_COOLDOWN }
-    val hasMentalClarityRules = enabledRules.any { it.ruleType == RuleType.MENTAL_CLARITY }
-    val hasPrayerModeRules = enabledRules.any { it.ruleType == RuleType.PRAYER_MODE }
-    val hasActiveRules = enabledRules.any { blockingTimeManager.isRuleActive(it) }
-    
-    Log.d("ServiceScheduler", "Has SIMPLE: $hasSimpleRules, SMART_COOLDOWN: $hasSmartCooldownRules, MENTAL_CLARITY: $hasMentalClarityRules, PRAYER_MODE: $hasPrayerModeRules, Active: $hasActiveRules")
-    
-    // Start service immediately for any of these conditions:
-    // - SIMPLE rules (always need monitoring)
-    // - SMART_COOLDOWN rules (need session tracking)
-    // - MENTAL_CLARITY rules (need sleep detection)
-    // - PRAYER_MODE rules (need prayer time monitoring)
-    // - Any currently active rule
-    if (hasSimpleRules || hasSmartCooldownRules || hasMentalClarityRules || hasPrayerModeRules || hasActiveRules) {
-        Log.d("ServiceScheduler", "Starting service immediately")
-        startMonitoringService()
-        cancelScheduledService()
-    } else {
-        // All rules are SCHEDULED and not active yet
-        Log.d("ServiceScheduler", "All rules are SCHEDULED and not active")
+    suspend fun scheduleService() {
+        val allRules = preferencesManager.blockingRules.first()
+        val enabledRules = allRules.filter { it.enabled }
         
-        // Find next activation time
-        val nextStartTime = calculateNextStartTime(enabledRules)
+        Log.d("ServiceScheduler", "=== scheduleService() called ===")
+        Log.d("ServiceScheduler", "Total rules: ${allRules.size}, Enabled: ${enabledRules.size}")
         
-        if (nextStartTime != null) {
-            Log.d("ServiceScheduler", "Next start time calculated: ${java.util.Date(nextStartTime)}")
-            scheduleServiceStart(nextStartTime)
-        } else {
-            Log.d("ServiceScheduler", "No upcoming scheduled times")
-            stopService()
+        if (enabledRules.isEmpty()) {
+            Log.d("ServiceScheduler", "No enabled rules")
+            cancelScheduledService()
+            return
         }
+        
+        // With Accessibility Service, blocking happens automatically when apps are opened.
+        // The service is managed by Android, not us.
+        Log.d("ServiceScheduler", "Accessibility Service handles blocking - no action needed")
     }
-}
     
     /**
      * Calculate when service should next start (5 min before SCHEDULED rules)
      */
-private fun calculateNextStartTime(rules: List<BlockingRule>): Long? {
-    val now = System.currentTimeMillis()
-    val currentCal = Calendar.getInstance()
-    
-    Log.d("ServiceScheduler", "Calculating next start time. Current time: ${java.util.Date(now)}")
-    
-    val scheduledTimes = rules
-        .filter { it.ruleType == RuleType.SCHEDULED }
-        .mapNotNull { rule ->
-            rule.fromTime?.let { (hour, minute) ->
-                // FIXED: Check if rule is currently active first
-                val isCurrentlyActive = blockingTimeManager.isRuleActive(rule)
-                
-                if (isCurrentlyActive) {
-                    // Rule is active NOW - don't schedule, service should already be running
-                    Log.d("ServiceScheduler", "Rule '${rule.getDisplayName()}' is currently active - no scheduling needed")
-                    return@mapNotNull null
-                }
-                
-                val startCal = Calendar.getInstance()
-                startCal.set(Calendar.HOUR_OF_DAY, hour)
-                startCal.set(Calendar.MINUTE, minute)
-                startCal.set(Calendar.SECOND, 0)
-                startCal.set(Calendar.MILLISECOND, 0)
-                
-                // Subtract 5 minutes for pre-start
-                startCal.add(Calendar.MINUTE, -PRE_START_MINUTES)
-                
-                var startTime = startCal.timeInMillis
-                
-                Log.d("ServiceScheduler", "Rule: ${rule.getDisplayName()}, Original time: $hour:$minute, Pre-start time: ${java.util.Date(startTime)}")
-                
-                // If time has passed today, schedule for next occurrence
-                if (startTime <= now) {
-                    startCal.add(Calendar.DAY_OF_YEAR, 1)
-                    startTime = startCal.timeInMillis
-                    Log.d("ServiceScheduler", "Time passed, rescheduled for tomorrow: ${java.util.Date(startTime)}")
-                }
-                
-                startTime
-            }
-        }
-    
-    val nextTime = scheduledTimes.minOrNull()
-    Log.d("ServiceScheduler", "Next start time: ${if (nextTime != null) java.util.Date(nextTime) else "null"}")
-    
-    return nextTime
-}
-
-private fun scheduleServiceStart(startTime: Long) {
-    val intent = Intent(context, ServiceStartReceiver::class.java)
-    val pendingIntent = PendingIntent.getBroadcast(
-        context,
-        REQUEST_CODE,
-        intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    // Cancel any existing alarms
-    alarmManager.cancel(pendingIntent)
-    // Check if we can schedule exact alarms (Android 12+)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        if (!alarmManager.canScheduleExactAlarms()) {
-            Log.e("ServiceScheduler", "Cannot schedule exact alarms - permission not granted!")
-            // Fallback: start service now instead of scheduling
-            startMonitoringService()
-            return
-        }
-    }
-    // Schedule new alarm
-    try {
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            startTime,
-            pendingIntent
-        )
+    private fun calculateNextStartTime(rules: List<BlockingRule>): Long? {
+        val now = System.currentTimeMillis()
+        val currentCal = Calendar.getInstance()
         
-        val timeUntil = (startTime - System.currentTimeMillis()) / 1000 / 60
-        Log.d("ServiceScheduler", "✓ Service scheduled to start in $timeUntil minutes at ${java.util.Date(startTime)}")
-    } catch (e: SecurityException) {
-        Log.e("ServiceScheduler", "SecurityException scheduling alarm: ${e.message}")
-        // Fallback: start service now
-        startMonitoringService()
-    }
-}
+        Log.d("ServiceScheduler", "Calculating next start time. Current time: ${java.util.Date(now)}")
+        
+        val scheduledTimes = rules
+            .filter { it.ruleType == RuleType.SCHEDULED }
+            .mapNotNull { rule ->
+                rule.fromTime?.let { (hour, minute) ->
+                    val isCurrentlyActive = blockingTimeManager.isRuleActive(rule)
+                    
+                    if (isCurrentlyActive) {
+                        Log.d("ServiceScheduler", "Rule '${rule.getDisplayName()}' is currently active - no scheduling needed")
+                        return@mapNotNull null
+                    }
+                    
+                    val startCal = Calendar.getInstance()
+                    startCal.set(Calendar.HOUR_OF_DAY, hour)
+                    startCal.set(Calendar.MINUTE, minute)
+                    startCal.set(Calendar.SECOND, 0)
+                    startCal.set(Calendar.MILLISECOND, 0)
 
-    private fun startMonitoringService() {
-        val intent = Intent(context, AppMonitoringService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+                    // Check if rule applies to current day
+                    val currentDayOfWeek = currentCal.get(Calendar.DAY_OF_WEEK)
+                    val ruleAppliesOnThisDay = rule.daysOfWeek.isEmpty() || rule.daysOfWeek.any { it.calendarValue == currentDayOfWeek }
+                    
+                    // If start time has passed today
+                    if (startCal.timeInMillis <= now) {
+                        if (ruleAppliesOnThisDay) {
+                            // Already past for today, look for next occurrence
+                            startCal.add(Calendar.DAY_OF_YEAR, 1)
+                        } else {
+                            // Find the next day this rule applies
+                            for (i in 1..7) {
+                                startCal.add(Calendar.DAY_OF_YEAR, 1)
+                                val dayOfWeek = startCal.get(Calendar.DAY_OF_WEEK)
+                                if (rule.daysOfWeek.isEmpty() || rule.daysOfWeek.any { it.calendarValue == dayOfWeek }) {
+                                    break
+                                }
+                            }
+                        }
+                    }
+
+                    // Subtract pre-start buffer
+                    val scheduleTime = startCal.timeInMillis - (PRE_START_MINUTES * 60 * 1000L)
+                    
+                    Log.d("ServiceScheduler", "Rule '${rule.getDisplayName()}' next start: ${java.util.Date(scheduleTime)}")
+                    scheduleTime
+                }
+            }
+            .filter { it > now }
+
+        return scheduledTimes.minOrNull()
+    }
+
+    private fun scheduleServiceStart(startTime: Long) {
+        val intent = Intent(context, ServiceStartReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                startTime,
+                pendingIntent
+            )
+            
+            val timeUntil = (startTime - System.currentTimeMillis()) / 1000 / 60
+            Log.d("ServiceScheduler", "✓ Alarm scheduled for $timeUntil minutes at ${java.util.Date(startTime)}")
+        } catch (e: SecurityException) {
+            Log.e("ServiceScheduler", "SecurityException scheduling alarm: ${e.message}")
         }
     }
 
@@ -181,21 +143,12 @@ private fun scheduleServiceStart(startTime: Long) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         alarmManager.cancel(pendingIntent)
-        Log.d("ServiceScheduler", "Canceled scheduled service")
-    }
-    
-    private fun stopService() {
-        val intent = Intent(context, AppMonitoringService::class.java)
-        context.stopService(intent)
+        Log.d("ServiceScheduler", "Canceled scheduled alarms")
     }
 
     fun resetService() {
-        // Cancel any scheduled service start
+        // Cancel any scheduled alarms
         cancelScheduledService()
-
-        // Stop the monitoring service
-        stopService()
-
-        Log.d("ServiceScheduler", "Service reset - stopped service and cancelled schedules")
+        Log.d("ServiceScheduler", "Service reset - cancelled scheduled alarms")
     }
 }

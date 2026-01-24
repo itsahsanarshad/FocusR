@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">FocusR</string>
+    <string name="accessibility_service_description">FocusR uses accessibility to detect when you open blocked apps and show a blocking screen. This helps you stay focused and maintain digital wellbeing by preventing access to distracting apps during focus sessions.</string>
 </resources>

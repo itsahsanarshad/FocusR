@@ -24,7 +24,7 @@ class AppMonitoringService : Service() {
     private lateinit var blockingTimeManager: BlockingTimeManager
     private lateinit var sleepDetectionManager: SleepDetectionManager
     private lateinit var prayerTimeManager: PrayerTimeManager  // For Prayer Mode
-    private val usageSessionManager = UsageSessionManager()  // For Smart Cooldown
+    private lateinit var usageSessionManager: UsageSessionManager  // For Smart Cooldown (persisted)
     private val notificationHandler = Handler(Looper.getMainLooper())
     private var notificationRunnable: Runnable? = null
     private var lastDetectedApp: String? = null
@@ -41,6 +41,7 @@ class AppMonitoringService : Service() {
         prayerTimeManager = PrayerTimeManager(this)
         blockingTimeManager = BlockingTimeManager(preferencesManager, prayerTimeManager)
         sleepDetectionManager = SleepDetectionManager(this)
+        usageSessionManager = UsageSessionManager(this)  // Pass context for SharedPreferences
         createNotificationChannel()
         
         // Perform migration on service creation

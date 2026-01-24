@@ -77,11 +77,9 @@ import com.focusr.v2.ui.viewmodels.RuleViewModel
 import com.focusr.v2.BlockingTimeManager
 
 enum class PermissionStep {
-    USAGE_STATS,
     OVERLAY,
     ACCESSIBILITY,
-
-    BATTERY_OPTIMIZATION,  // new step added here
+    BATTERY_OPTIMIZATION,
     COMPLETED
 }
 
@@ -106,7 +104,7 @@ fun HomeScreen(activity: MainActivity, navController: NavController) {
     // UI State
     var showPauseDialog by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
-    var currentPermissionStep by remember { mutableStateOf(PermissionStep.USAGE_STATS) }
+    var currentPermissionStep by remember { mutableStateOf(PermissionStep.OVERLAY) }
     var isWaitingForPermission by remember { mutableStateOf(false) }
 
     // Check if paused
@@ -154,8 +152,8 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
                     // Mark first launch as complete
                     preferencesManager.setFirstLaunchCompleted()
                 }
-                // Start permission flow
-                currentPermissionStep = PermissionStep.USAGE_STATS
+                // Start permission flow (Accessibility-based, no UsageStats needed)
+                currentPermissionStep = PermissionStep.OVERLAY
                 isWaitingForPermission = true
                 showPermissionDialog = true
             }
@@ -166,14 +164,6 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
     fun checkPermissionFlow() {
         if (!isWaitingForPermission) return
         when (currentPermissionStep) {
-            PermissionStep.USAGE_STATS -> {
-                if (PermissionHelper.hasUsageStatsPermission(context)) {
-                    currentPermissionStep = PermissionStep.OVERLAY
-                    showPermissionDialog = true
-                } else {
-                    showPermissionDialog = true
-                }
-            }
             PermissionStep.OVERLAY -> {
                 if (PermissionHelper.hasOverlayPermission(context)) {
                     currentPermissionStep = PermissionStep.ACCESSIBILITY
@@ -183,7 +173,7 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
                 }
             }
             PermissionStep.ACCESSIBILITY -> {
-                if (isAccessibilityServiceEnabled(context)) {
+                if (PermissionHelper.hasAccessibilityPermission(context)) {
                     currentPermissionStep = PermissionStep.BATTERY_OPTIMIZATION
                     showPermissionDialog = true
                 } else {
@@ -348,16 +338,12 @@ val pulseAnimation by rememberInfiniteTransition().animateFloat(
                     },
                     onGrantPermission = {
                         when (currentPermissionStep) {
-                            PermissionStep.USAGE_STATS -> {
-                                PermissionHelper.requestUsageStatsPermission(activity)
-                                showPermissionDialog = false
-                            }
                             PermissionStep.OVERLAY -> {
                                 PermissionHelper.requestOverlayPermission(activity)
                                 showPermissionDialog = false
                             }
                             PermissionStep.ACCESSIBILITY -> {
-                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                PermissionHelper.requestAccessibilityPermission(activity)
                                 showPermissionDialog = false
                             }
                             PermissionStep.BATTERY_OPTIMIZATION -> {
@@ -391,33 +377,27 @@ fun ModernPermissionDialog(
     
 
     val (title, description, buttonText, icon) = when (step) {
-        PermissionStep.USAGE_STATS -> Quadruple(
-            "Usage Access Permission",
-            "Grant usage access to detect when blocked apps are opened and maintain your focus.",
-            "Grant Permission",
-            Icons.Outlined.Analytics
-        )
         PermissionStep.OVERLAY -> Quadruple(
             "Display Over Apps",
-            "Allow Focusr to display blocking screens over other apps to protect your focus.",
+            "Allow FocusR to display blocking screens over other apps to protect your focus.",
             "Grant Permission",
             Icons.Outlined.Layers
         )
         PermissionStep.ACCESSIBILITY -> Quadruple(
             "Accessibility Service",
-            "Enable the accessibility service for instant app detection and seamless blocking.",
+            "Enable the accessibility service for instant app detection and seamless blocking. Find \"FocusR\" in the list and turn it on.",
             "Enable Service",
             Icons.Outlined.Accessibility
         )
         PermissionStep.BATTERY_OPTIMIZATION -> Quadruple(
             "Battery Optimization",
-            "Please remove Focusr from battery optimizations so it can run reliably in the background.\n Step.1 Search ForcusR in All apps, Step.2 Remove From Optimization Mode, Enjoy your Focusr Journey",
-            "Remove",
-            Icons.Outlined.BatteryChargingFull  // Or a suitable battery icon
+            "Please remove FocusR from battery optimizations so it can run reliably in the background.\nStep 1: Search FocusR in All apps\nStep 2: Remove from Optimization Mode",
+            "Configure",
+            Icons.Outlined.BatteryChargingFull
         )
         PermissionStep.COMPLETED -> Quadruple(
             "Setup Complete!",
-            "All permissions granted successfully. Your Focusr is now active.",
+            "All permissions granted successfully. FocusR is now active and ready to help you focus!",
             "Got it",
             Icons.Outlined.CheckCircle
         )
@@ -593,9 +573,8 @@ fun ModernPermissionDialog(
 
                     // Progress Indicator
                     val progress = when (step) {
-                        PermissionStep.USAGE_STATS -> 0.25f
-                        PermissionStep.OVERLAY -> 0.5f
-                        PermissionStep.ACCESSIBILITY -> 0.75f
+                        PermissionStep.OVERLAY -> 0.33f
+                        PermissionStep.ACCESSIBILITY -> 0.67f
                         PermissionStep.BATTERY_OPTIMIZATION -> 1f
                         else -> 1f
                     }
@@ -632,12 +611,11 @@ fun ModernPermissionDialog(
 
                         Text(
                             "Step ${when(step) {
-                                PermissionStep.USAGE_STATS -> "1"
-                                PermissionStep.OVERLAY -> "2"
-                                PermissionStep.ACCESSIBILITY -> "3"
-                                PermissionStep.BATTERY_OPTIMIZATION -> "4"
-                                else -> "4"
-                            }} of 4",
+                                PermissionStep.OVERLAY -> "1"
+                                PermissionStep.ACCESSIBILITY -> "2"
+                                PermissionStep.BATTERY_OPTIMIZATION -> "3"
+                                else -> "3"
+                            }} of 3",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontWeight = FontWeight.Medium
                             ),
@@ -747,17 +725,7 @@ data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val 
 
 
 fun isAccessibilityServiceEnabled(context: Context): Boolean {
-//    val expectedComponentName = ComponentName(context, FocusBlockerAccessibilityService::class.java)
-//    val enabledServicesSetting = Settings.Secure.getString(
-//        context.contentResolver,
-//        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-//    ) ?: return false
-//
-//    return enabledServicesSetting.split(":").any {
-//        ComponentName.unflattenFromString(it) == expectedComponentName
-//    }
-
-    return true
+    return PermissionHelper.hasAccessibilityPermission(context)
 }
 
 

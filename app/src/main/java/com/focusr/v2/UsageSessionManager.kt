@@ -1,19 +1,38 @@
 package com.focusr.v2
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
+import org.json.JSONObject
 
 /**
  * Manages in-memory session tracking for Smart Cooldown rules.
  * Tracks continuous usage time per app and manages cooldown states.
+ * 
+ * IMPORTANT: Cooldown states are persisted to SharedPreferences to survive
+ * service restarts. Session usage tracking is still in-memory (acceptable
+ * since it resets on service restart anyway - user gets a fresh session).
  */
-class UsageSessionManager {
+class UsageSessionManager(context: Context) {
     
     companion object {
         private const val TAG = "UsageSessionManager"
+        private const val PREFS_NAME = "smart_cooldown_prefs"
+        private const val KEY_COOLDOWNS = "active_cooldowns"
     }
     
-    // In-memory storage for app sessions
+    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    
+    // In-memory storage for app sessions (usage tracking)
     private val sessions = mutableMapOf<String, AppSession>()
+    
+    // Persisted cooldowns (survives service restart)
+    private val persistedCooldowns = mutableMapOf<String, Long>()  // packageName -> cooldownEndsAt
+    
+    init {
+        // Load persisted cooldowns on startup
+        loadPersistedCooldowns()
+    }
     
     /**
      * Represents an active usage session for an app
@@ -23,8 +42,6 @@ class UsageSessionManager {
         var sessionStartTime: Long = System.currentTimeMillis(),
         var totalUsageSeconds: Int = 0,
         var lastSeenTime: Long = System.currentTimeMillis(),
-        var inCooldown: Boolean = false,
-        var cooldownEndsAt: Long? = null,
         var lastClosedAt: Long? = null  // For post-closure break tracking
     )
     
@@ -49,8 +66,6 @@ class UsageSessionManager {
             Log.d(TAG, "Starting new session for $packageName (was away ${timeSinceLastSeen / 1000}s)")
             session.sessionStartTime = now
             session.totalUsageSeconds = 0
-            session.inCooldown = false
-            session.cooldownEndsAt = null
         } else {
             // Continue existing session - add ~3 seconds (monitoring interval)
             session.totalUsageSeconds += 3
@@ -77,24 +92,20 @@ class UsageSessionManager {
     }
     
     /**
-     * Checks if an app is currently in cooldown.
+     * Checks if an app is currently in cooldown (uses persisted storage).
      */
     fun isInCooldown(packageName: String): Boolean {
-        val session = sessions[packageName] ?: return false
-        
-        if (!session.inCooldown) return false
+        val cooldownEnd = persistedCooldowns[packageName] ?: return false
         
         // Check if cooldown has expired
-        val cooldownEnd = session.cooldownEndsAt ?: return false
         if (System.currentTimeMillis() >= cooldownEnd) {
             // Cooldown expired - clear it
-            session.inCooldown = false
-            session.cooldownEndsAt = null
-            session.totalUsageSeconds = 0  // Reset session for next use
+            clearCooldown(packageName)
             Log.d(TAG, "Cooldown expired for $packageName")
             return false
         }
         
+        Log.d(TAG, "$packageName is in cooldown until ${cooldownEnd}")
         return true
     }
     
@@ -102,23 +113,35 @@ class UsageSessionManager {
      * Gets remaining cooldown time in minutes.
      */
     fun getCooldownRemainingMinutes(packageName: String): Int? {
-        val session = sessions[packageName] ?: return null
-        val cooldownEnd = session.cooldownEndsAt ?: return null
-        
-        if (!session.inCooldown) return null
+        val cooldownEnd = persistedCooldowns[packageName] ?: return null
         
         val remaining = (cooldownEnd - System.currentTimeMillis()) / 1000 / 60
         return remaining.toInt().coerceAtLeast(0)
     }
     
     /**
-     * Starts a cooldown period for an app.
+     * Starts a cooldown period for an app (persisted to SharedPreferences).
      */
     fun startCooldown(packageName: String, cooldownMinutes: Int) {
-        val session = sessions.getOrPut(packageName) { AppSession(packageName) }
-        session.inCooldown = true
-        session.cooldownEndsAt = System.currentTimeMillis() + (cooldownMinutes * 60 * 1000L)
-        Log.d(TAG, "Started ${cooldownMinutes}m cooldown for $packageName")
+        val cooldownEndsAt = System.currentTimeMillis() + (cooldownMinutes * 60 * 1000L)
+        persistedCooldowns[packageName] = cooldownEndsAt
+        savePersistedCooldowns()
+        
+        // Also reset session usage for when cooldown ends
+        sessions[packageName]?.totalUsageSeconds = 0
+        
+        Log.d(TAG, "Started ${cooldownMinutes}m cooldown for $packageName (persisted)")
+    }
+    
+    /**
+     * Clears cooldown for an app.
+     */
+    private fun clearCooldown(packageName: String) {
+        persistedCooldowns.remove(packageName)
+        savePersistedCooldowns()
+        
+        // Reset session for fresh start
+        sessions[packageName]?.totalUsageSeconds = 0
     }
     
     /**
@@ -158,6 +181,7 @@ class UsageSessionManager {
      */
     fun resetSession(packageName: String) {
         sessions.remove(packageName)
+        clearCooldown(packageName)
         Log.d(TAG, "Reset session for $packageName")
     }
     
@@ -166,6 +190,8 @@ class UsageSessionManager {
      */
     fun clearAllSessions() {
         sessions.clear()
+        persistedCooldowns.clear()
+        savePersistedCooldowns()
         Log.d(TAG, "Cleared all sessions")
     }
     
@@ -179,4 +205,51 @@ class UsageSessionManager {
         // Show warning when exactly at threshold (to avoid repeated warnings)
         return usedMinutes == warningThreshold
     }
+    
+    // ========== Persistence Methods ==========
+    
+    /**
+     * Loads persisted cooldowns from SharedPreferences.
+     */
+    private fun loadPersistedCooldowns() {
+        try {
+            val json = prefs.getString(KEY_COOLDOWNS, null) ?: return
+            val jsonObject = JSONObject(json)
+            
+            val now = System.currentTimeMillis()
+            val keys = jsonObject.keys()
+            while (keys.hasNext()) {
+                val packageName = keys.next()
+                val cooldownEnd = jsonObject.getLong(packageName)
+                
+                // Only load cooldowns that haven't expired
+                if (cooldownEnd > now) {
+                    persistedCooldowns[packageName] = cooldownEnd
+                    Log.d(TAG, "Loaded persisted cooldown for $packageName (${(cooldownEnd - now) / 1000 / 60}m remaining)")
+                }
+            }
+            
+            Log.d(TAG, "Loaded ${persistedCooldowns.size} persisted cooldowns")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading persisted cooldowns: ${e.message}")
+        }
+    }
+    
+    /**
+     * Saves persisted cooldowns to SharedPreferences.
+     */
+    private fun savePersistedCooldowns() {
+        try {
+            val jsonObject = JSONObject()
+            persistedCooldowns.forEach { (packageName, cooldownEnd) ->
+                jsonObject.put(packageName, cooldownEnd)
+            }
+            
+            prefs.edit().putString(KEY_COOLDOWNS, jsonObject.toString()).apply()
+            Log.d(TAG, "Saved ${persistedCooldowns.size} cooldowns to SharedPreferences")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving persisted cooldowns: ${e.message}")
+        }
+    }
 }
+
